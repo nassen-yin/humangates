@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from app.config import get_settings
 from app.database import init_db
-from app.routers import tasks
+from app.routers import tasks, files
 
 settings = get_settings()
 
@@ -44,11 +44,10 @@ def root():
     <p>AI agent 调用的物理世界任务交付层。<br>
     发一个任务，我们安排真人去执行，结果回传给你。</p>
 
-    <h2>API 端点</h2>
-
+    <h2>任务接口</h2>
     <div class="endpoint">
         <span class="method">POST</span> <code>/v1/tasks</code>
-        <span style="margin-left:12px;color:#666">创建新任务</span>
+        <span style="margin-left:12px;color:#666">创建新任务，自动进入 pending_review</span>
     </div>
     <div class="endpoint">
         <span class="method">GET</span> <code>/v1/tasks</code>
@@ -56,22 +55,51 @@ def root():
     </div>
     <div class="endpoint">
         <span class="method">GET</span> <code>/v1/tasks/{id}</code>
-        <span style="margin-left:12px;color:#666">查询单个任务状态</span>
+        <span style="margin-left:12px;color:#666">查询单个任务详情</span>
     </div>
     <div class="endpoint">
         <span class="method">PUT</span> <code>/v1/tasks/{id}/status</code>
-        <span style="margin-left:12px;color:#666">更新任务状态（内部用）</span>
+        <span style="margin-left:12px;color:#666">更新状态（管理端）</span>
+    </div>
+    <div class="endpoint">
+        <span class="method">POST</span> <code>/v1/tasks/{id}/notes</code>
+        <span style="margin-left:12px;color:#666">添加备注（管理端）</span>
+    </div>
+    <div class="endpoint">
+        <span class="method">GET</span> <code>/v1/tasks/{id}/timeline</code>
+        <span style="margin-left:12px;color:#666">查看任务时间线</span>
+    </div>
+
+    <h2>文件接口</h2>
+    <div class="endpoint">
+        <span class="method">POST</span> <code>/v1/tasks/{id}/files</code>
+        <span style="margin-left:12px;color:#666">上传文件（管理端）</span>
+    </div>
+    <div class="endpoint">
+        <span class="method">GET</span> <code>/v1/tasks/{id}/files</code>
+        <span style="margin-left:12px;color:#666">查看已上传文件</span>
     </div>
 
     <h2>快速开始</h2>
-    <pre>curl -X POST https://api.humangates.com/v1/tasks \\
-  -H "X-API-Key: your-api-key" \\
-  -H "Content-Type: application/json" \\
+    <pre>curl -X POST http://localhost:8000/v1/tasks \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
   -d '{
     "type": "company_registration",
     "params": {
-      "city": "石家庄",
-      "company_name": "示例科技有限公司"
+      "company_names": ["示例科技有限公司", "示例技术有限公司"],
+      "business_scope": "软件开发；信息技术咨询服务",
+      "registered_capital": 100,
+      "shareholders": [
+        {"name": "张三", "id_number": "130123199001011234", "phone": "13800138000",
+         "capital_contribution": 60, "percentage": 60, "role": "legal_person"},
+        {"name": "李四", "id_number": "130123199001011235", "phone": "13800138001",
+         "capital_contribution": 40, "percentage": 40, "role": "supervisor"}
+      ],
+      "address_type": "lease",
+      "address_detail": "河北省石家庄市长安区中山路100号",
+      "contact_name": "张三",
+      "contact_phone": "13800138000"
     }
   }'</pre>
 
@@ -80,10 +108,11 @@ def root():
     <p>替代格式：<a href="/redoc">ReDoc</a></p>
 
     <div class="footer">
-        Human Gates v0.1.0 &mdash; humangates.com
+        Human Gates v0.2.0 &mdash; humangates.com
     </div>
 </body>
 </html>"""
 
 
 app.include_router(tasks.router, prefix=f"{settings.api_prefix}/tasks")
+app.include_router(files.router, prefix=f"{settings.api_prefix}/tasks")
