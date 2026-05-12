@@ -8,7 +8,7 @@ load_dotenv()
 
 class Settings(BaseSettings):
     app_name: str = "Human Gates API"
-    app_version: str = "0.4.0"
+    app_version: str = "0.5.0"
     master_api_key: str = ""
     admin_api_key: str = ""
     database_url: str = "sqlite:///./humangates.db"

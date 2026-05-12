@@ -1460,12 +1460,39 @@ SERVICE_REGISTRY = {
 VALID_TASK_TYPES = list(SERVICE_REGISTRY.keys())
 
 
+# ── v0.5.0 超值定价（credits计价，1 credit ≈ 1 RMB）──
+
+SERVICE_PRICING = {
+    "company_registration": {"base_price": 499, "market_price": "699-1299", "cheap_reason": "流程标准化，AI 预填+人工跑腿，比代记账公司便宜30%"},
+    "high_tech_application": {"base_price": 5000, "market_price": "8000-30000", "cheap_reason": "评分预评估AI化，减少无效申报"},
+    "ip_application": {"base_price": 599, "market_price": "800-8000", "cheap_reason": "查新和撰写AI辅助，降低人工成本"},
+    "import_export": {"base_price": 599, "market_price": "800-2500", "cheap_reason": "材料预审AI化，一次性通过率提升"},
+    "legal_consulting": {"base_price": 199, "market_price": "200-30000", "cheap_reason": "AI初筛+律师终审，降低咨询门槛"},
+    "accounting": {"base_price": 99, "market_price": "200/月", "cheap_reason": "票据OCR+AI记账，人工复核更低成本"},
+    "tax_registration": {"base_price": 199, "market_price": "300-500", "cheap_reason": "AI预填+人工跑腿"},
+    "bank_account": {"base_price": 299, "market_price": "300-800", "cheap_reason": "资料预审AI化，一次通过"},
+    "license_application": {"base_price": 599, "market_price": "1000-5000", "cheap_reason": "材料AI预审，减少返工"},
+    "company_change": {"base_price": 399, "market_price": "500-2000", "cheap_reason": "流程AI化，效率翻倍"},
+    "team_building": {"base_price": 0, "market_price": "按方案报价", "cheap_reason": "免费咨询方案，按需求报价"},
+    "business_dining": {"base_price": 0, "market_price": "免费咨询", "cheap_reason": "免费推荐，按消费结算"},
+    "corporate_procurement": {"base_price": 0, "market_price": "按需报价", "cheap_reason": "比价后报价，透明中间价"},
+    "logistics_delivery": {"base_price": 0, "market_price": "比价报价", "cheap_reason": "对接多家运力，选最优"},
+    "sales_outsourcing": {"base_price": 0, "market_price": "按效果付费", "cheap_reason": "免费需求匹配，谈成收费"},
+    "third_party_operations": {"base_price": 0, "market_price": "3000-20000/月", "cheap_reason": "免费方案推荐"},
+    "recruitment_outsourcing": {"base_price": 0, "market_price": "年薪15-25%", "cheap_reason": "按结果收费"},
+    "corporate_training": {"base_price": 0, "market_price": "5000-50000/场", "cheap_reason": "免费比价，推荐最优讲师"},
+    "manufacturing_sampling": {"base_price": 0, "market_price": "按量报价", "cheap_reason": "免费工厂匹配"},
+    "bidding_service": {"base_price": 0, "market_price": "2000-10000/项目", "cheap_reason": "AI标书辅助+人工终审"},
+}
+
+
 # ── 通用请求/响应模型 ──
 
 class TaskCreate(BaseModel):
     type: str = Field(..., description="任务类型，调用前先查询 /v1/services 获取可用类型")
     params: Dict[str, Any] = Field(..., description="任务参数，按对应服务类型的 JSON Schema 填写")
     callback_url: Optional[str] = Field(None, description="Webhook 回调地址（任务完成时通知）")
+    customer_id: Optional[str] = Field(None, description="客户ID（v0.5.0+ 客户系统，用于扣费）")
 
     @field_validator("type")
     @classmethod
@@ -1564,13 +1591,24 @@ class SupplierCreate(BaseModel):
     phone: str = Field(..., min_length=11, description="手机号")
     wechat: Optional[str] = Field(None, description="微信号")
     city: str = Field(..., min_length=1, description="所在城市")
-    service_types: List[str] = Field(..., min_length=1, description="可服务品类")
+    service_types: List[str] = Field(..., min_length=1, description="可服务品类ID列表")
+    regions: List[str] = Field(default=[], description="服务覆盖区域（城市列表）")
+    specialties: List[str] = Field(default=[], description="擅长领域/专长标签")
     id_number: Optional[str] = Field(None, description="身份证号（自然人）/ 信用代码（企业）")
     qualification_desc: Optional[str] = Field(None, description="资质说明")
 
 class SupplierUpdate(BaseModel):
     status: str = Field(..., description="审核状态: approved / rejected")
     notes: Optional[str] = Field(None, description="审核备注")
+
+class SupplierInfoUpdate(BaseModel):
+    """运营端更新供应商详细信息"""
+    regions: Optional[List[str]] = None
+    specialties: Optional[List[str]] = None
+    rating: Optional[float] = Field(None, ge=0, le=5, description="评分 0-5")
+    verified: Optional[bool] = None
+    available: Optional[bool] = None
+    notes: Optional[str] = None
 
 class SupplierInfo(BaseModel):
     id: int
@@ -1579,15 +1617,77 @@ class SupplierInfo(BaseModel):
     wechat: Optional[str] = None
     city: str
     service_types: List[str]
+    regions: List[str] = []
+    specialties: List[str] = []
     id_number: Optional[str] = None
     qualification_desc: Optional[str] = None
     status: str
+    rating: float = 0
+    completed_tasks: int = 0
+    verified: bool = False
+    available: bool = True
     notes: Optional[str] = None
     created_at: str
     updated_at: str
 
 class SupplierListResponse(BaseModel):
     suppliers: List[SupplierInfo]
+    total: int
+
+
+# ── v0.5.0 客户模型 ──
+
+class CustomerCreate(BaseModel):
+    name: str = Field(..., min_length=1, description="客户姓名/企业名称")
+    email: Optional[str] = Field(None, description="邮箱")
+    phone: Optional[str] = Field(None, description="手机号")
+    company_name: Optional[str] = Field(None, description="企业名称")
+    notes: Optional[str] = Field(None, description="备注")
+    initial_credits: float = Field(0, ge=0, description="初始赠送积分")
+
+class CustomerUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    company_name: Optional[str] = None
+    status: Optional[str] = Field(None, description="active / disabled")
+    notes: Optional[str] = None
+
+class CustomerInfo(BaseModel):
+    id: str
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    company_name: Optional[str] = None
+    credits_balance: float
+    total_spent: float
+    total_tasks: int
+    status: str
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+class CustomerListResponse(BaseModel):
+    customers: List[CustomerInfo]
+    total: int
+
+class CreditRecharge(BaseModel):
+    amount: float = Field(..., gt=0, description="充值金额（credits）")
+    description: Optional[str] = Field(None, description="充值备注")
+
+class CreditTransactionInfo(BaseModel):
+    id: int
+    customer_id: str
+    task_id: Optional[str] = None
+    amount: float
+    balance_before: float
+    balance_after: float
+    type: str
+    description: Optional[str] = None
+    created_at: str
+
+class CreditTransactionListResponse(BaseModel):
+    transactions: List[CreditTransactionInfo]
     total: int
 
 
@@ -1598,6 +1698,9 @@ class DashboardResponse(BaseModel):
     total_tasks: int
     supplier_counts: Dict[str, int]
     total_suppliers: int
+    customer_counts: Dict[str, int] = {}
+    total_customers: int = 0
+    total_credits_in_system: float = 0
 
 
 # ── 文件 ──
@@ -1629,6 +1732,8 @@ class TaskResponse(BaseModel):
     params: Dict[str, Any]
     result: Optional[Dict[str, Any]] = None
     callback_url: Optional[str] = None
+    customer_id: Optional[str] = None
+    price: Optional[float] = None
     created_at: str
     updated_at: str
 

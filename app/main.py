@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.database import init_db
-from app.routers import tasks, files, services, operations
+from app.routers import tasks, files, services, operations, suppliers, customers
 
 settings = get_settings()
 
@@ -37,6 +37,17 @@ def pricing():
     return (WWW_DIR / "pricing.html").read_text(encoding="utf-8")
 
 
+@app.get("/supplier-register", response_class=HTMLResponse)
+def supplier_register():
+    return (WWW_DIR / "supplier-register.html").read_text(encoding="utf-8")
+
+
+@app.get("/admin", response_class=HTMLResponse)
+@app.get("/admin/", response_class=HTMLResponse)
+def admin_panel():
+    return (WWW_DIR / "admin" / "index.html").read_text(encoding="utf-8")
+
+
 # Static assets: CSS, JS, images
 app.mount("/css", StaticFiles(directory=str(WWW_DIR / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(WWW_DIR / "js")), name="js")
@@ -45,3 +56,5 @@ app.include_router(tasks.router, prefix=f"{settings.api_prefix}/tasks")
 app.include_router(files.router, prefix=f"{settings.api_prefix}/tasks")
 app.include_router(services.router, prefix=f"{settings.api_prefix}/services")
 app.include_router(operations.router, prefix=f"{settings.api_prefix}/tasks")
+app.include_router(suppliers.router, prefix=f"{settings.api_prefix}/suppliers")
+app.include_router(customers.router, prefix=f"{settings.api_prefix}/customers")
