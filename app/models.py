@@ -1187,7 +1187,7 @@ class LegalConsultingParams(BaseModel):
 SERVICE_REGISTRY = {
     "company_registration": {
         "name": "公司注册",
-        "description": "石家庄地区有限责任公司设立。核名 -> 材料准备 -> 工商提交 -> 执照领取，全流程代办。法人无需到场。",
+        "description": "全国有限责任公司设立。核名 -> 材料准备 -> 工商提交 -> 执照领取，全流程代办。法人无需到场，e签宝远程签名。",
         "status": "live",
         "schema_model": CompanyRegistrationParams,
         "estimated_days": "7-14",

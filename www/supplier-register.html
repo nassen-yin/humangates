@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>服务商入驻 — Human Gates</title>
+  <meta name="description" content="注册成为 Human Gates 服务商，为 AI Agent 提供真人执行服务。">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231a56db'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='18' font-weight='700' font-family='sans-serif'>HG</text></svg>">
+</head>
+<body>
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="logo">
+        <span class="logo-icon">HG</span>
+        Human Gates
+      </a>
+      <ul class="nav-links">
+        <li><a href="/">首页</a></li>
+        <li><a href="/api-docs">API 文档</a></li>
+        <li><a href="/pricing">价格</a></li>
+        <li><a href="/admin/" class="nav-cta">运营面板</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <section class="hero" style="padding-bottom:2rem;">
+    <div class="container">
+      <h1>成为 Human Gates 服务商</h1>
+      <p class="hero-lead">AI Agent 在线上接单，你在线下执行。我们提供订单、标准流程和结算保障。</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container" style="max-width:640px;">
+      <div id="register-form">
+        <div class="form-group">
+          <label>姓名 / 企业名称</label>
+          <input id="name" type="text" placeholder="张三 / 石家庄万事通代办" required>
+        </div>
+        <div class="form-group">
+          <label>手机号</label>
+          <input id="phone" type="tel" placeholder="13800138000" pattern="^1[3-9]\d{9}$" required>
+        </div>
+        <div class="form-group">
+          <label>微信号（选填）</label>
+          <input id="wechat" type="text" placeholder="用于日常沟通">
+        </div>
+        <div class="form-group">
+          <label>所在城市</label>
+          <input id="city" type="text" placeholder="北京 / 上海 / 广州..." required>
+        </div>
+        <div class="form-group">
+          <label>可服务品类（可多选）</label>
+          <div id="service-types" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+            <label class="checkbox-label"><input type="checkbox" value="company_registration" checked> 公司注册</label>
+            <label class="checkbox-label"><input type="checkbox" value="accounting"> 代理记账</label>
+            <label class="checkbox-label"><input type="checkbox" value="bank_account"> 银行开户</label>
+            <label class="checkbox-label"><input type="checkbox" value="tax_registration"> 税务登记</label>
+            <label class="checkbox-label"><input type="checkbox" value="license_application"> 资质代办</label>
+            <label class="checkbox-label"><input type="checkbox" value="company_change"> 工商变更</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>身份证号 / 信用代码（选填）</label>
+          <input id="id_number" type="text" placeholder="用于实名认证">
+        </div>
+        <div class="form-group">
+          <label>资质说明（选填）</label>
+          <textarea id="qualification" rows="3" placeholder="请描述你的服务经验、团队规模、覆盖区域等"></textarea>
+        </div>
+        <button class="btn btn-primary" style="width:100%;" onclick="submitRegistration()">提交入驻申请</button>
+      </div>
+      <div id="register-success" style="display:none;text-align:center;padding:40px 0;">
+        <div style="font-size:48px;margin-bottom:16px;">🎉</div>
+        <h3>申请已提交</h3>
+        <p style="color:#6b7280;margin-top:8px;">我们将在 1-2 个工作日内完成审核。审核通过后你会收到通知。</p>
+        <a href="/" class="btn btn-secondary" style="margin-top:16px;">返回首页</a>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="logo"><span class="logo-icon">HG</span> Human Gates</div>
+          <p>打通 AI 与人类世界的最后一公里。</p>
+        </div>
+        <div class="footer-col">
+          <h4>产品</h4>
+          <a href="/api-docs">API 文档</a>
+          <a href="/pricing">价格</a>
+        </div>
+      </div>
+      <div class="footer-bottom">&copy; 2026 Human Gates. humangates.com</div>
+    </div>
+  </footer>
+
+  <style>
+    .form-group { margin-bottom:16px; }
+    .form-group label { display:block; font-weight:500; color:#374151; margin-bottom:4px; font-size:14px; }
+    .form-group input, .form-group textarea {
+      width:100%; padding:10px 12px; border:1px solid #d1d5db; border-radius:8px;
+      font-size:15px; box-sizing:border-box;
+    }
+    .form-group input:focus, .form-group textarea:focus {
+      outline:none; border-color:#1a56db; box-shadow:0 0 0 3px rgba(26,86,219,0.1);
+    }
+    .checkbox-label {
+      display:flex; align-items:center; gap:4px; font-size:14px; color:#374151;
+      background:#f9fafb; padding:6px 12px; border-radius:6px; border:1px solid #e5e7eb; cursor:pointer;
+    }
+    .checkbox-label:has(input:checked) {
+      background:#eff6ff; border-color:#1a56db; color:#1a56db;
+    }
+  </style>
+
+  <script>
+    async function submitRegistration() {
+      const checked = [...document.querySelectorAll('#service-types input:checked')].map(c => c.value);
+      const body = {
+        name: document.getElementById('name').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        wechat: document.getElementById('wechat').value.trim() || null,
+        city: document.getElementById('city').value.trim(),
+        service_types: checked,
+        id_number: document.getElementById('id_number').value.trim() || null,
+        qualification_desc: document.getElementById('qualification').value.trim() || null,
+      };
+      if (!body.name) return alert('请输入姓名');
+      if (!body.phone || !/^1[3-9]\d{9}$/.test(body.phone)) return alert('请输入正确的手机号');
+      if (!body.city) return alert('请输入所在城市');
+      if (checked.length === 0) return alert('请至少选择一个服务品类');
+
+      try {
+        const res = await fetch('/v1/suppliers/register', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || '提交失败');
+        }
+        document.getElementById('register-form').style.display = 'none';
+        document.getElementById('register-success').style.display = 'block';
+      } catch (e) {
+        alert('提交失败：' + e.message);
+      }
+    }
+  </script>
+</body>
+</html>
