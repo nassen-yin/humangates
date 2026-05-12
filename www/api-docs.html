@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API 文档 — Human Gates v0.5</title>
+  <meta name="description" content="Human Gates API 参考文档。AI Agent 调用物理世界真人服务的标准通信协议。v0.5 新增客户系统、供应商增强、任务定价和仪表盘。">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231a56db'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='18' font-weight='700' font-family='sans-serif'>HG</text></svg>">
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="logo">
+        <span class="logo-icon">HG</span>
+        Human Gates
+      </a>
+      <button class="mobile-toggle" aria-label="菜单">☰</button>
+      <ul class="nav-links">
+        <li><a href="/">首页</a></li>
+        <li><a href="/api-docs" class="active">API 文档</a></li>
+        <li><a href="/pricing">价格</a></li>
+        <li><a href="/pricing#contact" class="nav-cta">联系我们</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="container">
+    <div class="doc-layout">
+
+      <!-- Sidebar -->
+      <aside class="doc-sidebar">
+        <h4>目录</h4>
+        <a href="#overview">概述</a>
+        <a href="#philosophy">设计理念</a>
+        <a href="#services">服务目录</a>
+        <a href="#auth">认证</a>
+        <a href="#create-task">创建任务</a>
+        <a href="#list-tasks">查询列表</a>
+        <a href="#get-task">查询详情</a>
+        <a href="#update-status">更新状态</a>
+        <a href="#progress">进度查询</a>
+        <a href="#documents">文档生成</a>
+        <a href="#document-list">文书列表</a>
+        <a href="#files">文件上传</a>
+        <a href="#timeline">时间线</a>
+        <a href="#audit-log">审计日志</a>
+        <a href="#customers">客户系统</a>
+        <a href="#suppliers">供应商</a>
+        <a href="#task-pricing">任务定价</a>
+        <a href="#dashboard">仪表盘</a>
+        <a href="#schemas">数据模型</a>
+      </aside>
+
+      <!-- Content -->
+      <main class="doc-content">
+
+        <h2 id="overview">概述</h2>
+        <p>Human Gates 是 AI Agent 与物理世界之间的标准通信协议。通过统一的 REST API，开发者可以为 AI Agent 接入真人执行能力——公司注册、资质代办、银行面签、跑腿办事……只要是需要人跑一趟的事情，都能通过这一个 API 完成。</p>
+        <pre><code>https://api.humangates.com/v1</code></pre>
+        <p>当前已上线 <strong>公司注册</strong>，更多品类正在开发中。每个品类都有独立的结构化参数定义、内嵌的 validation 规则、以及完整的能力描述——AI Agent 可一次性读全、一次性填对、一次性通过审核。</p>
+
+        <h2 id="philosophy">设计理念</h2>
+        <p>Human Gates 不只是一个工单系统。我们的核心价值在于：<strong>定义标准化的数据结构，让 AI 消除人与人之间的沟通成本。</strong></p>
+        <p>注册公司最大的成本不是几百块工本费，而是资料来回修改、信息反复确认的时间。我们的 API 用深度结构化的 schema，强迫 AI Agent 第一次提交就把所有信息收集全——股东信息、章程条款、地址证明、高管任职……一个都不少。</p>
+        <p><strong>v0.5 新增能力：</strong></p>
+        <ul>
+          <li><strong>客户系统</strong>：创建/管理客户、充值扣费、交易流水查询</li>
+          <li><strong>增强供应商 API</strong>：按区域/专长/评分搜索，更新供应商标注与状态</li>
+          <li><strong>任务定价</strong>：统一返回各服务定价（积分数），任务创建支持 customer_id 自动扣费</li>
+          <li><strong>仪表盘增强</strong>：客户统计、积分总量等运营数据</li>
+        </ul>
+        <p><strong>v0.3 新增能力：</strong></p>
+        <ul>
+          <li><strong>能力描述</strong>（capabilities）：每个服务返回 agent_auto（10 项自动判定）、human_required（7 项人工事项）、escalation（5 个转人条件）</li>
+          <li><strong>名称驳回知识库</strong>：6 条全国通用规则，匹配成功自动生成替代方案</li>
+          <li><strong>经营范围映射表</strong>：20 组关键词到工商标准表述，全自动填充率约 80%</li>
+          <li><strong>城市分级</strong>：第一梯队 5 城（e签宝覆盖，零人工），第二梯队 7 城（待验证）</li>
+          <li><strong>e签宝集成</strong>：5 个 API 端点，8 元/份，全程线上</li>
+          <li><strong>8 状态机</strong>：draft -> materials_collecting -> name_verification -> submitting -> in_progress -> needs_info -> approved -> completed</li>
+        </ul>
+        <p><strong>API 调用流程：</strong></p>
+        <pre><code>第一步：GET  /v1/services           → AI 读取可用服务 + 完整 JSON Schema + 能力描述 + 知识库
+第二步：POST /v1/tasks               → 按 Schema 一次性提交结构化数据（初始状态: draft）
+第三步：GET  /v1/tasks/{id}/progress → 实时查询进度百分比和各步骤状态
+第四步：POST /v1/tasks/{id}/documents → 自动生成全套法律文书
+第五步：等待外部服务回调            → e签宝完成实名认证→电子签名→工商递交
+第六步：GET  /v1/tasks/{id}          → 获取最终结果</code></pre>
+
+        <h2 id="services">服务目录</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/services</span>
+            <span class="endpoint-desc">AI Agent 的第一个问题：你要什么服务？</span>
+          </div>
+          <div class="endpoint-body">
+            <p>调用 Human Gates API 的第一步。返回所有可用服务类型，<strong>每种类型附带完整的 JSON Schema、validation 规则和能力描述</strong>。AI Agent 可直接读取 schema 结构和 capabilities，按所需字段向用户收集信息，无需硬编码任何业务逻辑。</p>
+            <p><strong>v0.3 新增字段：</strong></p>
+            <table class="doc-table">
+              <thead>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>capabilities</code></td><td>object?</td><td>能力描述：状态机、agent_auto、human_required、escalation、名称知识库、经营范围映射、e签宝信息</td></tr>
+              </tbody>
+            </table>
+            <p><strong>响应示例：</strong></p>
+            <pre><code>{
+  "services": [
+    {
+      "type": "company_registration",
+      "name": "公司注册",
+      "status": "live",
+      "json_schema": { ... },
+      "capabilities": {
+        "status_machine": { ... },
+        "agent_auto": {
+          "description": "以下判定对方 agent 可独立完成",
+          "items": [
+            {"id": "format_validation", "name": "格式校验"},
+            {"id": "cross_field_validation", "name": "交叉校验"},
+            {"id": "name_precheck", "name": "名称预检"},
+            {"id": "name_rejection_auto", "name": "名称驳回自动处理"},
+            {"id": "scope_translation_auto", "name": "经营范围自动转化"},
+            ...
+          ]
+        },
+        "name_rejection_knowledge_base": {
+          "rules": [
+            {"pattern": "重名|已存在", "suggestion": "更换字号中的关键词"},
+            {"pattern": "近似|相似", "suggestion": "加地域修饰词或改为三字号"},
+            ...
+          ]
+        },
+        "scope_translation_mapping": {
+          "rules": [
+            {"keyword": "做软件|编程", "standard": "软件开发；技术开发、技术咨询..."},
+            {"keyword": "做抖音|新媒体", "standard": "组织文化艺术交流活动..."},
+            ...
+          ]
+        },
+        "external_services": {
+          "supported_cities": {
+            "tier_1": ["北京","上海","广州","深圳","杭州"],
+            "tier_2": ["成都","南京","武汉","重庆","天津","苏州","宁波"]
+          },
+          "registration_provider": {
+            "name": "e签宝",
+            "pricing": "8元/份",
+            "api_endpoints": [...],
+            "workflow": [...]
+          }
+        }
+      }
+    }
+  ]
+}</code></pre>
+            <p>当前已上线 1 个品类，5 个品类在开发/规划中。新品类上线后，调用者无需更新代码——接口自动返回新的 schema 和能力描述。</p>
+          </div>
+        </div>
+
+        <h2 id="auth">认证</h2>
+        <p>API 请求通过 HTTP Header 传递密钥，区分开发者端和管理端。两张密钥独立配置，权限隔离。</p>
+        <table class="doc-table">
+          <thead>
+            <tr><th>Header</th><th>用途</th><th>适用端点</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>X-API-Key</code></td><td>开发者密钥</td><td>创建任务、查询任务、查看服务目录、进度查询、文书列表、审计日志</td></tr>
+            <tr><td><code>X-Admin-Key</code></td><td>运营管理密钥</td><td>更新状态、添加备注、文书生成、上传文件</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="create-task">创建任务</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/tasks</span>
+            <span class="endpoint-desc">提交新任务，初始状态 draft</span>
+          </div>
+          <div class="endpoint-body">
+            <table class="doc-table">
+              <thead>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>type</code></td><td>string</td><td>任务类型，从 GET /v1/services 获取</td></tr>
+                <tr><td><code>params</code></td><td>object</td><td>结构化参数，按对应类型的 JSON Schema 填写</td></tr>
+                <tr><td><code>callback_url</code></td><td>string?</td><td>可选，任务完成回调</td></tr>
+                <tr><td><code>customer_id</code></td><td>string?</td><td>v0.5: 客户 ID，传入后自动计算价格并扣除客户积分</td></tr>
+              </tbody>
+            </table>
+            <p><strong>company_registration 参数结构：</strong></p>
+            <table class="doc-table">
+              <thead>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>company_names</code></td><td>string[]</td><td>公司名称备选（至少 1 个，最多 5 个）</td></tr>
+                <tr><td><code>registered_capital</code></td><td>number</td><td>注册资本（万元）</td></tr>
+                <tr><td><code>capital_currency</code></td><td>string</td><td>注册资本币种</td></tr>
+                <tr><td><code>business_scope</code></td><td>string</td><td>经营范围文字描述</td></tr>
+                <tr><td><code>shareholders</code></td><td>object[]</td><td>股东信息（详见下方）</td></tr>
+                <tr><td><code>executives</code></td><td>object[]?</td><td>高管任职安排</td></tr>
+                <tr><td><code>address</code></td><td>object</td><td>注册地址（含产权信息）</td></tr>
+                <tr><td><code>articles</code></td><td>object</td><td>章程关键条款</td></tr>
+                <tr><td><code>contact_name</code></td><td>string</td><td>联系人姓名</td></tr>
+                <tr><td><code>contact_phone</code></td><td>string</td><td>联系人手机号</td></tr>
+                <tr><td><code>contact_email</code></td><td>string?</td><td>联系邮箱</td></tr>
+                <tr><td><code>is_all_shareholders_verified</code></td><td>bool</td><td>是否所有股东已完成实名认证</td></tr>
+                <tr><td><code>verification_method</code></td><td>string?</td><td>实名认证方式: app / face / online</td></tr>
+                <tr><td><code>need_seal</code></td><td>bool</td><td>是否需要刻章</td></tr>
+                <tr><td><code>need_invoice</code></td><td>bool</td><td>是否需要申领发票</td></tr>
+                <tr><td><code>need_bank_account_intro</code></td><td>bool</td><td>是否需要推荐银行开户渠道</td></tr>
+                <tr><td><code>notes</code></td><td>string?</td><td>补充说明</td></tr>
+              </tbody>
+            </table>
+            <p><strong>完整示例请求（18 字段 x 12 子字段）：</strong></p>
+            <pre><code>curl -X POST https://api.humangates.com/v1/tasks \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "company_registration",
+    "params": {
+      "company_names": ["石家庄星河科技有限公司", "石家庄星辰技术有限公司"],
+      "registered_capital": 100,
+      "business_scope": "软件开发；信息技术咨询服务",
+      "shareholders": [
+        {"name": "张三", "id_number": "130123199001011234", "phone": "13800138000",
+         "capital_contribution": 60, "percentage": 60, "role": "legal_person",
+         "id_card_valid_from": "2020-01-01", "id_card_valid_until": "2040-01-01",
+         "contribution_method": "货币", "is_identity_verified": true},
+        {"name": "李四", "id_number": "130124199501011235", "phone": "13900139000",
+         "capital_contribution": 40, "percentage": 40, "role": "supervisor"}
+      ],
+      "address": {"address_type": "lease", "address_detail": "石家庄市长安区中山路100号12层",
+                  "property_owner_name": "创新孵化器", "property_cert_number": "冀(2020)第1234567号",
+                  "lease_term_years": 3, "lease_start_date": "2026-06-01"},
+      "articles": {"legal_representative": "执行董事兼任", "capital_contribution_deadline": "2031-06-01"},
+      "contact_name": "张三", "contact_phone": "13800138000",
+      "need_seal": true, "need_invoice": true
+    }
+  }'</code></pre>
+          </div>
+        </div>
+
+        <h2 id="list-tasks">查询任务列表</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tasks</span>
+            <span class="endpoint-desc">按状态过滤，支持分页</span>
+          </div>
+          <div class="endpoint-body">
+            <table class="doc-table">
+              <thead>
+                <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>status</code></td><td>string?</td><td>按状态过滤</td></tr>
+                <tr><td><code>limit</code></td><td>number?</td><td>每页数量（默认 20，最大 100）</td></tr>
+                <tr><td><code>offset</code></td><td>number?</td><td>分页偏移（默认 0）</td></tr>
+              </tbody>
+            </table>
+            <pre><code>curl "https://api.humangates.com/v1/tasks?status=draft&limit=10" \
+  -H "X-API-Key: your-api-key"</code></pre>
+          </div>
+        </div>
+
+        <h2 id="get-task">查询任务详情</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tasks/{task_id}</span>
+            <span class="endpoint-desc">完整信息，含当前状态、参数、结果</span>
+          </div>
+          <div class="endpoint-body">
+            <pre><code>curl https://api.humangates.com/v1/tasks/a1b2c3d4e5f6... \
+  -H "X-API-Key: your-api-key"</code></pre>
+          </div>
+        </div>
+
+        <h2 id="update-status">更新任务状态</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-put">PUT</span>
+            <span class="endpoint-path">/v1/tasks/{task_id}/status</span>
+            <span class="endpoint-desc">运营端操作，受 8 状态机约束</span>
+          </div>
+          <div class="endpoint-body">
+            <p><strong>v0.3 状态流转规则（8 状态）：</strong></p>
+            <pre><code>draft               ->  materials_collecting, needs_info
+materials_collecting ->  name_verification, needs_info
+name_verification    ->  submitting, needs_info
+submitting           ->  in_progress, needs_info
+in_progress          ->  needs_info, approved
+needs_info           ->  materials_collecting, submitting
+approved             ->  completed
+completed            ->  (终态)
+failed               ->  (终态)</code></pre>
+            <p><strong>工商局退回补件：</strong></p>
+            <pre><code>curl -X PUT https://api.humangates.com/v1/tasks/{task_id}/status \
+  -H "X-Admin-Key: your-admin-key" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "needs_info", "note": "经营范围表述不规范，请参照国民经济行业分类修改"}'</code></pre>
+            <p><strong>标记完成并回传结果：</strong></p>
+            <pre><code>curl -X PUT https://api.humangates.com/v1/tasks/{task_id}/status \
+  -H "X-Admin-Key: your-admin-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "completed",
+    "note": "执照已成功领取",
+    "result": {
+      "license_number": "91130100MAXXXXXX",
+      "issue_date": "2026-05-08",
+      "files": ["营业执照电子版已上传"]
+    }
+  }'</code></pre>
+          </div>
+        </div>
+
+        <h2 id="progress">进度查询（v0.3 新增）</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tasks/{task_id}/progress</span>
+            <span class="endpoint-desc">实时进度百分比及每步骤状态</span>
+          </div>
+          <div class="endpoint-body">
+            <p>返回任务当前进度，含总体百分比、估计剩余天数、以及 11 个步骤的详细状态。每一步标注 <code>pending</code> / <code>in_progress</code> / <code>completed</code> / <code>blocked</code> 及阻塞原因。</p>
+            <pre><code>curl https://api.humangates.com/v1/tasks/{task_id}/progress \
+  -H "X-API-Key: your-api-key"</code></pre>
+            <p><strong>响应示例：</strong></p>
+            <pre><code>{
+  "task_id": "task_abc123",
+  "current_state": "needs_info",
+  "overall_progress_pct": 35,
+  "estimated_remaining_days": 8,
+  "step_progress": [
+    {"step_id": "name_verification", "name": "名称核准", "status": "completed", "pct": 100},
+    {"step_id": "shareholder_info", "name": "股东信息", "status": "completed", "pct": 100},
+    {"step_id": "legal_representative", "name": "法定代表人", "status": "completed", "pct": 100},
+    {"step_id": "registered_capital", "name": "注册资本", "status": "completed", "pct": 100},
+    {"step_id": "registered_address", "name": "注册地址", "status": "blocked", "pct": 60,
+     "blocker": "有待补充材料"},
+    {"step_id": "business_scope", "name": "经营范围", "status": "pending", "pct": 0},
+    {"step_id": "articles_of_association", "name": "公司章程", "status": "pending", "pct": 0},
+    {"step_id": "document_generation", "name": "文书生成", "status": "pending", "pct": 0},
+    {"step_id": "e_sign_submission", "name": "e签宝递交", "status": "pending", "pct": 0},
+    {"step_id": "governance_review", "name": "工商局审核", "status": "pending", "pct": 0},
+    {"step_id": "license_collection", "name": "执照领取", "status": "pending", "pct": 0}
+  ]
+}</code></pre>
+          </div>
+        </div>
+
+        <h2 id="documents">文档生成（v0.3 新增）</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/tasks/{task_id}/documents</span>
+            <span class="endpoint-desc">根据已提交数据自动生成法律文书</span>
+          </div>
+          <div class="endpoint-body">
+            <p>根据任务中已经提交的结构化数据，自动生成全套工商注册所需的法律文书草稿：</p>
+            <ul>
+              <li><strong>公司章程</strong> — 包含股东信息、出资条款、治理结构</li>
+              <li><strong>股东会决议</strong> — 包含执行董事和监事任命</li>
+              <li><strong>法定代表人任职文件</strong></li>
+              <li><strong>租赁合同</strong>（如 address_type=lease）</li>
+            </ul>
+            <p>可选参数 <code>doc_types</code> 指定只生成部分文书。不传则生成全套。</p>
+            <pre><code>curl -X POST https://api.humangates.com/v1/tasks/{task_id}/documents \
+  -H "X-Admin-Key: your-admin-key" \
+  -H "Content-Type: application/json" \
+  -d '{"doc_types": ["articles_of_association", "shareholder_resolution"]}'</code></pre>
+          </div>
+        </div>
+
+        <h2 id="document-list">文书列表（v0.3 新增）</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tasks/{task_id}/documents</span>
+            <span class="endpoint-desc">查看已生成的文书列表及状态</span>
+          </div>
+          <div class="endpoint-body">
+            <p>返回所有文书及其状态：<code>pending</code> / <code>generated</code> / <code>signed</code> / <code>submitted</code>。</p>
+            <pre><code>curl https://api.humangates.com/v1/tasks/{task_id}/documents \
+  -H "X-API-Key: your-api-key"</code></pre>
+            <p><strong>响应示例：</strong></p>
+            <pre><code>{
+  "task_id": "task_abc123",
+  "documents": [
+    {"doc_type": "articles_of_association", "doc_name": "公司章程", "doc_status": "generated"},
+    {"doc_type": "shareholder_resolution", "doc_name": "股东会决议", "doc_status": "generated"},
+    {"doc_type": "appointment_doc", "doc_name": "任职文件", "doc_status": "pending"},
+    {"doc_type": "lease_contract", "doc_name": "租赁合同", "doc_status": "pending"}
+  ]
+}</code></pre>
+          </div>
+        </div>
+
+        <h2 id="files">文件上传</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/tasks/{task_id}/files</span>
+            <span class="endpoint-desc">上传身份证、合同等附件</span>
+          </div>
+          <div class="endpoint-body">
+            <p>支持格式：jpg / png / pdf / doc / docx。单文件上限 10MB。</p>
+            <pre><code>curl -X POST https://api.humangates.com/v1/tasks/{task_id}/files \
+  -H "X-Admin-Key: your-admin-key" \
+  -F "file=@id_card_front.jpg" \
+  -F "file_type=id_card_front" \
+  -F "note=法人身份证正面"</code></pre>
+            <p><code>file_type</code> 取值：<code>id_card_front</code> / <code>id_card_back</code> / <code>business_license</code> / <code>lease_contract</code> / <code>other</code></p>
+          </div>
+        </div>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tasks/{task_id}/files</span>
+            <span class="endpoint-desc">查看已上传文件列表</span>
+          </div>
+          <div class="endpoint-body">
+            <pre><code>curl https://api.humangates.com/v1/tasks/{task_id}/files \
+  -H "X-API-Key: your-api-key"</code></pre>
+          </div>
+        </div>
+
+        <h2 id="timeline">时间线</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tasks/{task_id}/timeline</span>
+            <span class="endpoint-desc">全流程操作记录，每一步可追溯</span>
+          </div>
+          <div class="endpoint-body">
+            <pre><code>curl https://api.humangates.com/v1/tasks/{task_id}/timeline \
+  -H "X-API-Key: your-api-key"</code></pre>
+          </div>
+        </div>
+
+        <h2 id="audit-log">审计日志（v0.3 新增）</h2>
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tasks/{task_id}/audit-log</span>
+            <span class="endpoint-desc">完整的审计溯源日志</span>
+          </div>
+          <div class="endpoint-body">
+            <p>与 timeline 返回相同数据，但明确区分操作方（agent / human / system），适合审计合规场景。</p>
+            <pre><code>curl https://api.humangates.com/v1/tasks/{task_id}/audit-log \
+  -H "X-API-Key: your-api-key"</code></pre>
+          </div>
+        </div>
+
+        <h2 id="customers">客户系统（v0.5 新增）</h2>
+        <p>客户管理系统的统一 API，支持客户的创建、查询、更新、积分充值及交易流水查询。适用于需要对接预付积分体系的场景——如企业客户批量采购服务积分，按任务逐笔扣费。</p>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/customers</span>
+            <span class="endpoint-desc">创建客户</span>
+          </div>
+          <div class="endpoint-body">
+            <table class="doc-table">
+              <thead>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>name</code></td><td>string</td><td>客户名称</td></tr>
+                <tr><td><code>email</code></td><td>string?</td><td>电子邮箱</td></tr>
+                <tr><td><code>phone</code></td><td>string?</td><td>联系电话</td></tr>
+                <tr><td><code>company_name</code></td><td>string?</td><td>企业名称</td></tr>
+                <tr><td><code>initial_credits</code></td><td>number?</td><td>初始积分额度（默认 0）</td></tr>
+              </tbody>
+            </table>
+            <pre><code>curl -X POST https://api.humangates.com/v1/customers \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "张三",
+    "email": "zhangsan@example.com",
+    "phone": "13800138000",
+    "company_name": "星河科技有限公司",
+    "initial_credits": 5000
+  }'</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/customers</span>
+            <span class="endpoint-desc">客户列表，支持过滤</span>
+          </div>
+          <div class="endpoint-body">
+            <table class="doc-table">
+              <thead>
+                <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>status</code></td><td>string?</td><td>按状态过滤: active / inactive</td></tr>
+                <tr><td><code>search</code></td><td>string?</td><td>按名称/邮箱/手机号模糊搜索</td></tr>
+                <tr><td><code>limit</code></td><td>number?</td><td>每页数量（默认 20）</td></tr>
+                <tr><td><code>offset</code></td><td>number?</td><td>分页偏移（默认 0）</td></tr>
+              </tbody>
+            </table>
+            <pre><code>curl "https://api.humangates.com/v1/customers?status=active&search=张三" \
+  -H "X-API-Key: your-api-key"</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/customers/{customer_id}</span>
+            <span class="endpoint-desc">客户详情</span>
+          </div>
+          <div class="endpoint-body">
+            <p>返回客户详细资料，含当前积分余额、状态、创建时间等。</p>
+            <pre><code>curl https://api.humangates.com/v1/customers/cust_abc123 \
+  -H "X-API-Key: your-api-key"</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-put">PUT</span>
+            <span class="endpoint-path">/v1/customers/{customer_id}</span>
+            <span class="endpoint-desc">更新客户信息</span>
+          </div>
+          <div class="endpoint-body">
+            <p>更新客户的基本信息字段。支持部分更新，仅传入需要修改的字段即可。</p>
+            <pre><code>curl -X PUT https://api.humangates.com/v1/customers/cust_abc123 \
+  -H "X-API-Key: your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "张三(更新)",
+    "phone": "13900139000"
+  }'</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-post">POST</span>
+            <span class="endpoint-path">/v1/customers/{customer_id}/recharge</span>
+            <span class="endpoint-desc">客户积分充值</span>
+          </div>
+          <div class="endpoint-body">
+            <table class="doc-table">
+              <thead>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>amount</code></td><td>number</td><td>充值积分数（必须为正整数）</td></tr>
+                <tr><td><code>description</code></td><td>string?</td><td>充值备注</td></tr>
+              </tbody>
+            </table>
+            <pre><code>curl -X POST https://api.humangates.com/v1/customers/cust_abc123/recharge \
+  -H "X-Admin-Key: your-admin-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount": 2000,
+    "description": "2026年5月续费"
+  }'</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/customers/{customer_id}/transactions</span>
+            <span class="endpoint-desc">交易流水</span>
+          </div>
+          <div class="endpoint-body">
+            <p>返回客户的积分交易流水，包含充值（credit）和消费（debit）两类记录。</p>
+            <table class="doc-table">
+              <thead>
+                <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>limit</code></td><td>number?</td><td>每页数量（默认 20）</td></tr>
+                <tr><td><code>offset</code></td><td>number?</td><td>分页偏移（默认 0）</td></tr>
+              </tbody>
+            </table>
+            <pre><code>curl "https://api.humangates.com/v1/customers/cust_abc123/transactions?limit=10" \
+  -H "X-API-Key: your-api-key"</code></pre>
+            <p><strong>响应示例：</strong></p>
+            <pre><code>{
+  "customer_id": "cust_abc123",
+  "transactions": [
+    {"type": "credit", "amount": 5000, "balance_after": 5000, "description": "开户赠送", "created_at": "2026-05-01T00:00:00Z"},
+    {"type": "debit", "amount": 800, "balance_after": 4200, "description": "公司注册 - 任务 tsk_001", "created_at": "2026-05-02T10:30:00Z"}
+  ],
+  "total": 2
+}</code></pre>
+          </div>
+        </div>
+
+        <h2 id="suppliers">增强供应商 API（v0.5 新增）</h2>
+        <p>供应商管理 API，支持查看可用的真人服务供应商、按区域/专长/评分搜索，以及更新供应商信息。</p>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-put">PUT</span>
+            <span class="endpoint-path">/v1/suppliers/{supplier_id}/info</span>
+            <span class="endpoint-desc">更新供应商信息</span>
+          </div>
+          <div class="endpoint-body">
+            <table class="doc-table">
+              <thead>
+                <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>regions</code></td><td>string[]?</td><td>服务区域列表</td></tr>
+                <tr><td><code>specialties</code></td><td>string[]?</td><td>专长标签列表</td></tr>
+                <tr><td><code>rating</code></td><td>number?</td><td>评分（0-5）</td></tr>
+                <tr><td><code>verified</code></td><td>bool?</td><td>是否已认证</td></tr>
+                <tr><td><code>available</code></td><td>bool?</td><td>是否可接单</td></tr>
+              </tbody>
+            </table>
+            <pre><code>curl -X PUT https://api.humangates.com/v1/suppliers/sup_abc123/info \
+  -H "X-Admin-Key: your-admin-key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "regions": ["北京","上海"],
+    "specialties": ["加急注册","异常处理"],
+    "available": false
+  }'</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/suppliers</span>
+            <span class="endpoint-desc">供应商列表（增强过滤）</span>
+          </div>
+          <div class="endpoint-body">
+            <table class="doc-table">
+              <thead>
+                <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>city</code></td><td>string?</td><td>按城市过滤</td></tr>
+                <tr><td><code>service_type</code></td><td>string?</td><td>按服务类型过滤</td></tr>
+                <tr><td><code>region</code></td><td>string?</td><td>按区域过滤</td></tr>
+                <tr><td><code>specialty</code></td><td>string?</td><td>按专长过滤</td></tr>
+                <tr><td><code>verified</code></td><td>bool?</td><td>仅显示已认证</td></tr>
+                <tr><td><code>available</code></td><td>bool?</td><td>仅显示可接单</td></tr>
+                <tr><td><code>min_rating</code></td><td>number?</td><td>最低评分（0-5）</td></tr>
+                <tr><td><code>limit</code></td><td>number?</td><td>每页数量（默认 20）</td></tr>
+                <tr><td><code>offset</code></td><td>number?</td><td>分页偏移（默认 0）</td></tr>
+              </tbody>
+            </table>
+            <pre><code>curl "https://api.humangates.com/v1/suppliers?city=北京&service_type=company_registration&available=true&min_rating=4" \
+  -H "X-API-Key: your-api-key"</code></pre>
+          </div>
+        </div>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/suppliers/search/available</span>
+            <span class="endpoint-desc">查找可用供应商</span>
+          </div>
+          <div class="endpoint-body">
+            <p>快速查找指定服务类型 + 城市/区域范围内当前可接单的供应商。结果按评分降序排列。</p>
+            <table class="doc-table">
+              <thead>
+                <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>service_type</code></td><td>string</td><td>服务类型</td></tr>
+                <tr><td><code>city</code></td><td>string?</td><td>城市（与 region 二选一）</td></tr>
+                <tr><td><code>region</code></td><td>string?</td><td>区域（与 city 二选一）</td></tr>
+                <tr><td><code>limit</code></td><td>number?</td><td>返回数量（默认 10）</td></tr>
+              </tbody>
+            </table>
+            <pre><code>curl "https://api.humangates.com/v1/suppliers/search/available?service_type=company_registration&city=北京" \
+  -H "X-API-Key: your-api-key"</code></pre>
+          </div>
+        </div>
+
+        <h2 id="task-pricing">任务定价（v0.5 新增）</h2>
+        <p>统一查询各服务的定价标准。所有价格以积分（credits）为单位。任务创建时传入 customer_id 将自动计算价格并从客户账户扣减对应积分。</p>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tasks/pricing</span>
+            <span class="endpoint-desc">所有服务定价</span>
+          </div>
+          <div class="endpoint-body">
+            <p>返回所有可用服务的定价信息（积分）。</p>
+            <pre><code>curl https://api.humangates.com/v1/tasks/pricing \
+  -H "X-API-Key: your-api-key"</code></pre>
+            <p><strong>响应示例：</strong></p>
+            <pre><code>{
+  "prices": [
+    {
+      "service_type": "company_registration",
+      "name": "公司注册",
+      "credits": 800,
+      "description": "公司注册服务 - 含名称核准、文书生成、e签宝递交"
+    }
+  ]
+}</code></pre>
+          </div>
+        </div>
+
+        <h2 id="dashboard">仪表盘（v0.5 新增）</h2>
+        <p>运营仪表盘 API，返回任务、客户和积分的全局统计概览。</p>
+
+        <div class="endpoint open">
+          <div class="endpoint-header">
+            <span class="endpoint-method method-get">GET</span>
+            <span class="endpoint-path">/v1/tasks/dashboard</span>
+            <span class="endpoint-desc">运营仪表盘</span>
+          </div>
+          <div class="endpoint-body">
+            <p>v0.5 新增字段：<code>customer_counts</code>、<code>total_customers</code>、<code>total_credits_in_system</code>。</p>
+            <pre><code>curl https://api.humangates.com/v1/tasks/dashboard \
+  -H "X-API-Key: your-api-key"</code></pre>
+            <p><strong>响应示例：</strong></p>
+            <pre><code>{
+  "tasks_by_status": { "draft": 5, "in_progress": 12, "completed": 48 },
+  "customer_counts": { "active": 25, "inactive": 3 },
+  "total_customers": 28,
+  "total_credits_in_system": 50000
+}</code></pre>
+          </div>
+        </div>
+
+        <h2 id="schemas">数据模型</h2>
+
+        <h3>任务状态（v0.3 8 状态）</h3>
+        <table class="doc-table">
+          <thead>
+            <tr><th>状态</th><th>含义</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>draft</code></td><td>初始状态，信息收集未完成</td></tr>
+            <tr><td><code>materials_collecting</code></td><td>材料收集中</td></tr>
+            <tr><td><code>name_verification</code></td><td>名称核准中</td></tr>
+            <tr><td><code>submitting</code></td><td>已提交至工商局</td></tr>
+            <tr><td><code>in_progress</code></td><td>工商局审核中</td></tr>
+            <tr><td><code>needs_info</code></td><td>需要补充材料（可从任何前序状态进入）</td></tr>
+            <tr><td><code>approved</code></td><td>审核通过</td></tr>
+            <tr><td><code>completed</code></td><td>任务已完成</td></tr>
+            <tr><td><code>failed</code></td><td>任务失败</td></tr>
+          </tbody>
+        </table>
+
+        <h3>任务响应对象</h3>
+        <table class="doc-table">
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>task_id</code></td><td>string</td><td>32 位十六进制任务 ID</td></tr>
+            <tr><td><code>type</code></td><td>string</td><td>任务类型</td></tr>
+            <tr><td><code>status</code></td><td>string</td><td>当前状态</td></tr>
+            <tr><td><code>params</code></td><td>object</td><td>结构化任务参数</td></tr>
+            <tr><td><code>result</code></td><td>object?</td><td>执行结果</td></tr>
+            <tr><td><code>callback_url</code></td><td>string?</td><td>回调地址</td></tr>
+            <tr><td><code>created_at</code></td><td>string</td><td>创建时间（ISO 8601）</td></tr>
+            <tr><td><code>updated_at</code></td><td>string</td><td>最后更新时间</td></tr>
+          </tbody>
+        </table>
+
+        <h3>进度响应对象（v0.3）</h3>
+        <table class="doc-table">
+          <thead>
+            <tr><th>字段</th><th>类型</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>current_state</code></td><td>string</td><td>当前 8 状态值</td></tr>
+            <tr><td><code>overall_progress_pct</code></td><td>number</td><td>总体完成百分比（0-100）</td></tr>
+            <tr><td><code>estimated_remaining_days</code></td><td>number?</td><td>估计剩余天数</td></tr>
+            <tr><td><code>step_progress</code></td><td>object[]</td><td>11 步骤详细状态</td></tr>
+          </tbody>
+        </table>
+
+        <h3>即将开放的服务类型</h3>
+        <table class="doc-table">
+          <thead>
+            <tr><th>服务类型</th><th>状态</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>company_registration</code></td><td><span style="color:#16a34a;font-weight:600;">已上线</span></td><td>公司注册（v0.3：8 状态 + 能力描述 + 知识库 + e签宝）</td></tr>
+            <tr><td><code>accounting</code></td><td><span style="color:#2563eb;">即将上线</span></td><td>代理记账（schema 已定义）</td></tr>
+            <tr><td><code>tax_registration</code></td><td>规划中</td><td>税务登记与税种核定</td></tr>
+            <tr><td><code>bank_account</code></td><td>规划中</td><td>对公银行开户预约与面签陪同</td></tr>
+            <tr><td><code>license_application</code></td><td>规划中</td><td>ICP 许可证等资质申请</td></tr>
+            <tr><td><code>company_change</code></td><td>规划中</td><td>工商变更</td></tr>
+          </tbody>
+        </table>
+        <p>新品类上线后，<code>GET /v1/services</code> 会自动返回新的 schema 和能力描述。关注 <a href="https://github.com/nassen-yin/humangates">GitHub</a> 获取最新动态。</p>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="logo">
+            <span class="logo-icon">HG</span>
+            Human Gates
+          </div>
+          <p>打通 AI 与人类世界的最后一公里。通过统一的 API 层，让 AI Agent 调用物理世界中的真人服务。</p>
+        </div>
+        <div class="footer-col">
+          <h4>产品</h4>
+          <a href="/api-docs">API 文档</a>
+          <a href="/pricing">价格</a>
+          <a href="https://github.com/nassen-yin/humangates">GitHub</a>
+        </div>
+        <div class="footer-col">
+          <h4>支持</h4>
+          <a href="/pricing#contact">联系我们</a>
+          <a href="https://github.com/nassen-yin/humangates/issues">问题反馈</a>
+        </div>
+        <div class="footer-col">
+          <h4>法律</h4>
+          <a href="#">服务条款</a>
+          <a href="#">隐私政策</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        &copy; 2026 Human Gates. humangates.com
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>
