@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, Any, Dict, List
 
 
@@ -339,6 +339,676 @@ class AccountingParams(BaseModel):
 
 
 # ═══════════════════════════════════════════════
+# 板块三：高企认定/专精特新 (high_tech_application)
+# ═══════════════════════════════════════════════
+
+HIGH_TECH_STATUSES = [
+    "draft",                    # 初始状态，信息不完整
+    "materials_collecting",     # 材料收集阶段
+    "submitting",               # 已提交至主管部门
+    "in_review",                # 评审中
+    "needs_info",               # 需要补充材料（可从任何状态进入）
+    "approved",                 # 审核通过
+    "failed",                   # 任务失败
+]
+
+CAPABILITIES_HIGH_TECH = {
+    "status_machine": {
+        "initial": "draft",
+        "states": HIGH_TECH_STATUSES,
+        "transitions": {
+            "draft": ["materials_collecting"],
+            "materials_collecting": ["submitting", "needs_info"],
+            "submitting": ["in_review", "needs_info"],
+            "in_review": ["needs_info", "approved", "failed"],
+            "needs_info": ["materials_collecting", "submitting"],
+            "approved": [],
+            "failed": [],
+        },
+    },
+    "agent_auto": {
+        "description": "以下判定对方 agent 可独立完成，无需人工介入",
+        "items": [
+            {"id": "ip_audit", "name": "知识产权审计", "detail": "自动审核专利/软著数量、类型、有效期，按评分标准折算分值"},
+            {"id": "financial_check", "name": "财务数据审核", "detail": "核查近三年营收、净资产、研发费用占比是否符合认定门槛"},
+            {"id": "rd_staff_ratio", "name": "研发人员比例核算", "detail": "统计研发人员占员工总数比例，自动比对认定标准"},
+            {"id": "score_pre_evaluation", "name": "评分预评估", "detail": "根据四大维度（知识产权、成果转化、研发管理、成长性）自动打分并预测通过概率"},
+            {"id": "document_completeness", "name": "材料完整性检查", "detail": "逐项检查认定所需全套材料的提交状态，标记缺失项"},
+            {"id": "format_validation", "name": "格式校验", "detail": "校验上传文件的格式、大小、命名规范及OCR可读性"},
+        ],
+    },
+    "human_required": {
+        "description": "以下事项需要真人介入",
+        "items": [
+            {"id": "expert_interview_prep", "name": "专家答辩辅导", "detail": "高企认定含专家评审环节，需要组织客户进行答辩模拟和材料完善"},
+            {"id": "government_submission", "name": "系统提交至主管部门", "detail": "需要登录各地科技/经信部门系统进行最终提交（含CA/电子印章）"},
+            {"id": "on_site_inspection", "name": "现场考察陪同", "detail": "部分认定需要实地考察企业研发场所，需专人陪同接待"},
+            {"id": "audit_firm_coordination", "name": "审计事务所协调", "detail": "需要具备资质的审计事务所出具专项审计报告（研发费用/高新技术产品收入）"},
+            {"id": "rejection_appeal", "name": "认定驳回申诉", "detail": "认定结果驳回后，需要人工分析原因并组织复核/申诉材料"},
+        ],
+    },
+    "escalation": {
+        "description": "触发转人的条件",
+        "trigger_conditions": [
+            {"condition": "财务指标不达标", "action": "标记暂不符合认定条件 + 输出改善建议 + 通知客户 + 转人工跟进咨询"},
+            {"condition": "知识产权数量不足", "action": "标记知识产权缺口 + 建议加急申请专利或软著 + 转人工协调办理"},
+            {"condition": "研发人员占比低于10%", "action": "标记人员结构不达标 + 建议调整组织架构或补充社保记录 + 转人工沟通"},
+            {"condition": "认定截止日期临近", "action": "标记紧急状态 + 输出加急处理清单 + 通知人工优先排队处理"},
+        ],
+    },
+    "knowledge_base": {
+        "description": "高企认定评分标准和资质类型知识库",
+        "scoring_criteria": [
+            {
+                "dimension": "知识产权（≤30分）",
+                "score": 30,
+                "key_factors": ["发明专利每项7-8分", "实用新型每项2分", "软著每项1-2分", "集成电路布图每项5分", "数量6项以上为A档"],
+            },
+            {
+                "dimension": "科技成果转化能力（≤30分）",
+                "score": 30,
+                "key_factors": ["年均5项以上为A档", "需提供转化证明（合同/发票/检测报告）", "成果形式包括专利/软著/技术诀窍等"],
+            },
+            {
+                "dimension": "研究开发组织管理水平（≤20分）",
+                "score": 20,
+                "key_factors": ["研发立项管理制度", "研发投入核算体系", "产学研合作协议", "研发人员绩效考核制度", "科技成果转化激励制度"],
+            },
+            {
+                "dimension": "企业成长性（≤20分）",
+                "score": 20,
+                "key_factors": ["净资产增长率（≤10分）", "销售收入增长率（≤10分）", "近三年数据均正增长为A档"],
+            },
+        ],
+        "qualification_types": [
+            {
+                "type": "high_tech",
+                "name": "高新技术企业认定",
+                "description": "科技部认定的国家级高企，享受15%企业所得税优惠税率",
+                "basic_requirements": ["注册成立一年以上", "核心知识产权自主所有", "研发人员占比≥10%", "近三年研发费用占销售收入比例达标（<5000万≥5%，5000万-2亿≥4%，>2亿≥3%）", "高新收入占总收入≥60%"],
+            },
+            {
+                "type": "specialized_sme",
+                "name": "专精特新中小企业",
+                "description": "省级经信部门认定的专业化、精细化、特色化、新颖化中小企业",
+                "basic_requirements": ["注册成立两年以上", "上年营收≥1000万元", "研发投入占比≥3%", "拥有至少2项知识产权", "专业化/精细化/特色化/新颖化四维度评分达标"],
+            },
+            {
+                "type": "little_giant",
+                "name": "专精特新小巨人企业",
+                "description": "国家级专精特新小巨人，最高级别认定，享受中央财政重点支持",
+                "basic_requirements": ["已认定为省级专精特新中小企业", "上年营收≥1亿元（非重点领域可放宽至5000万）", "研发投入占比≥3%且研发人员占比≥15%", "拥有至少5项核心发明专利", "主导产品在细分市场占有率排名前列"],
+            },
+        ],
+    },
+}
+
+
+class IpItem(BaseModel):
+    type: str = Field(..., description="知识产权类型: invention（发明专利）/ utility（实用新型）/ design（外观设计）/ copyright（软著）")
+    name: str = Field(..., min_length=1, description="知识产权名称")
+    reg_number: str = Field(..., min_length=1, description="授权号/登记号")
+    status: str = Field(..., description="状态: granted（已授权）/ pending（审查中）/ expired（已过期）")
+    grant_date: str = Field(..., description="授权日期（YYYY-MM-DD）")
+
+class FinancialYearData(BaseModel):
+    year: int = Field(..., description="年度（如2023）")
+    revenue: float = Field(..., ge=0, description="营业收入（万元）")
+    rd_expenses: float = Field(..., ge=0, description="研发费用（万元）")
+    total_assets: float = Field(..., ge=0, description="总资产（万元）")
+    net_profit: float = Field(..., description="净利润（万元，可负值）")
+
+class StaffInfo(BaseModel):
+    total_employees: int = Field(..., ge=1, description="员工总数")
+    rd_employees: int = Field(..., ge=0, description="研发人员数")
+    education_stats: Optional[Dict[str, int]] = Field(None, description="学历分布统计（如 {\"硕士\": 5, \"本科\": 20, \"大专及以下\": 10}）")
+
+class HighTechProduct(BaseModel):
+    name: str = Field(..., min_length=1, description="高新技术产品/服务名称")
+    revenue_ratio: float = Field(..., ge=0, le=100, description="产品收入占高新总收入比例（%）")
+    related_ip: Optional[List[str]] = Field(None, description="关联的知识产权名称列表")
+
+class HighTechApplicationParams(BaseModel):
+    # 企业基本信息
+    company_name: str = Field(..., min_length=1, description="企业全称")
+    unified_social_credit_code: str = Field(..., min_length=18, max_length=18, description="统一社会信用代码（18位）")
+    registration_date: str = Field(..., description="注册成立日期（YYYY-MM-DD）")
+    registered_capital: float = Field(..., ge=1, description="注册资本（万元）")
+
+    # 行业与核心技术
+    industry: str = Field(..., min_length=1, description="所属行业（按国民经济行业分类）")
+    core_technology_description: str = Field(..., min_length=10, description="核心技术描述（简要说明主要技术方向及创新点）")
+
+    # 知识产权组合
+    ip_portfolio: List[IpItem] = Field(..., min_length=1, description="知识产权组合列表")
+
+    # 近三年财务数据
+    financials_3_years: List[FinancialYearData] = Field(..., min_length=3, max_length=3, description="近三年财务数据（需3年，精确到万元）")
+
+    # 人员信息
+    staff_info: StaffInfo = Field(..., description="人员结构信息")
+
+    # 高新产品/服务
+    high_tech_products: List[HighTechProduct] = Field(..., min_length=1, description="高新技术产品/服务列表")
+
+    # 申请类型
+    application_type: str = Field(..., description="认定类型: high_tech（高新技术企业）/ specialized_sme（专精特新中小企业）/ little_giant（专精特新小巨人）")
+
+    # 联系人
+    contact_name: str = Field(..., min_length=1, description="联系人姓名")
+    contact_phone: str = Field(..., min_length=11, description="联系人手机号")
+
+    # 备注
+    notes: Optional[str] = Field(None, description="补充说明")
+
+    @field_validator("unified_social_credit_code")
+    @classmethod
+    def validate_credit_code(cls, v):
+        if len(v) != 18:
+            raise ValueError(f"统一社会信用代码必须为18位，当前{v}长度{len(v)}")
+        return v
+
+    @field_validator("ip_portfolio")
+    @classmethod
+    def validate_ip_portfolio(cls, v):
+        if len(v) < 1:
+            raise ValueError("至少需要1项知识产权")
+        valid_types = {"invention", "utility", "design", "copyright"}
+        for ip in v:
+            if ip.type not in valid_types:
+                raise ValueError(f"无效的知识产权类型: {ip.type}，支持: {', '.join(valid_types)}")
+        return v
+
+    @field_validator("staff_info")
+    @classmethod
+    def validate_staff_ratio(cls, v):
+        if v.rd_employees > v.total_employees:
+            raise ValueError(f"研发人员数（{v.rd_employees}）不能超过员工总数（{v.total_employees}）")
+        rd_ratio = v.rd_employees / v.total_employees * 100
+        if rd_ratio < 10:
+            raise ValueError(f"研发人员占比必须≥10%，当前为 {rd_ratio:.1f}%")
+        return v
+
+    @field_validator("financials_3_years")
+    @classmethod
+    def validate_financials(cls, v):
+        if len(v) != 3:
+            raise ValueError(f"需要恰好3年的财务数据，当前提供{len(v)}年")
+        years = [fy.year for fy in v]
+        if len(set(years)) != 3:
+            raise ValueError("财务数据年份不能重复")
+        total_rd = sum(fy.rd_expenses for fy in v)
+        total_revenue = sum(fy.revenue for fy in v)
+        if total_revenue > 0:
+            rd_pct = total_rd / total_revenue * 100
+            # 简化校验：综合研发占比不低于3%（各类型标准不同，此处仅做基本检查）
+            if rd_pct < 1:
+                raise ValueError(f"近三年研发费用占营业收入比例异常偏低（{rd_pct:.2f}%），请核实数据")
+        return v
+
+    @field_validator("application_type")
+    @classmethod
+    def validate_application_type(cls, v):
+        valid_types = {"high_tech", "specialized_sme", "little_giant"}
+        if v not in valid_types:
+            raise ValueError(f"无效的认定类型: {v}，支持: {', '.join(valid_types)}")
+        return v
+
+    @field_validator("high_tech_products")
+    @classmethod
+    def validate_high_tech_products(cls, v):
+        total_ratio = sum(p.revenue_ratio for p in v)
+        if abs(total_ratio - 100) > 0.01:
+            raise ValueError(f"高新产品收入比例之和不等于100%，当前合计 {total_ratio}%")
+        return v
+
+
+# ═══════════════════════════════════════════════
+# 板块四：专利/软著申请 (ip_application)
+# ═══════════════════════════════════════════════
+
+IP_APPLICATION_STATUSES = [
+    "draft",                    # 初始状态，信息不完整
+    "materials_collecting",     # 材料收集阶段
+    "drafting",                 # 专利/软著撰写中
+    "submitting",               # 已提交至专利局/版权中心
+    "examination",              # 审查中
+    "needs_info",               # 需要补正/答复审查意见（可从任何状态进入）
+    "granted",                  # 已授权/登记
+    "rejected",                 # 被驳回
+]
+
+CAPABILITIES_IP = {
+    "status_machine": {
+        "initial": "draft",
+        "states": IP_APPLICATION_STATUSES,
+        "transitions": {
+            "draft": ["materials_collecting"],
+            "materials_collecting": ["drafting", "needs_info"],
+            "drafting": ["submitting", "needs_info"],
+            "submitting": ["examination", "needs_info"],
+            "examination": ["needs_info", "granted", "rejected"],
+            "needs_info": ["materials_collecting", "drafting"],
+            "granted": [],
+            "rejected": [],
+        },
+    },
+    "agent_auto": {
+        "description": "以下判定对方 agent 可独立完成，无需人工介入",
+        "items": [
+            {"id": "format_check", "name": "格式校验", "detail": "校验申请材料格式、页数、图片清晰度、命名规范等"},
+            {"id": "prior_art_search_basic", "name": "基础查新检索", "detail": "对技术关键词进行专利数据库初步检索，评估新颖性"},
+            {"id": "claim_structure_check", "name": "权利要求结构检查", "detail": "检查权利要求书的格式是否规范、引用关系是否正确、是否得到说明书支持"},
+            {"id": "fee_calculation", "name": "费用自动计算", "detail": "根据申请类型、申请方式、加速审查等自动计算官费和代理费"},
+            {"id": "document_completeness", "name": "材料完整性检查", "detail": "逐项检查申请所需材料的提交状态，标记缺失项"},
+        ],
+    },
+    "human_required": {
+        "description": "以下事项需要真人介入",
+        "items": [
+            {"id": "patent_drafting", "name": "专利/软著撰写", "detail": "权利要求书、说明书、摘要等核心文书需要专业代理人撰写"},
+            {"id": "examination_response", "name": "审查意见答复", "detail": "专利局/版权中心发出审查意见通知书，需要专利代理人分析并撰写答复意见"},
+            {"id": "priority_claim_handling", "name": "优先权处理", "detail": "要求优先权时需要核对优先权文件及翻译件，确保符合时限要求"},
+            {"id": "complex_technical_fields", "name": "复杂技术领域处理", "detail": "AI/区块链/生物医药等新兴复杂技术领域需要专业代理人深度理解后撰写"},
+            {"id": "foreign_filing", "name": "涉外申请", "detail": "PCT国际申请或直接向外国专利局提交申请，需要涉外专利代理机构处理"},
+        ],
+    },
+    "escalation": {
+        "description": "触发转人的条件",
+        "trigger_conditions": [
+            {"condition": "复杂技术领域", "action": "标记为复杂技术领域 + 转专业代理人撰写 + 暂停自动流程"},
+            {"condition": "需要涉外申请", "action": "标记涉外需求 + 转涉外代理机构对接 + 生成费用预估"},
+            {"condition": "审查意见答复期限临近", "action": "标记紧急状态 + 输出审查意见分析 + 通知人工优先处理"},
+            {"condition": "专利异议/无效宣告", "action": "标记异议/无效程序 + 转专业代理团队 + 暂停正常审查流程"},
+        ],
+    },
+    "knowledge_base": {
+        "description": "知识产权类型、时限与费用知识库",
+        "ip_types": [
+            {
+                "type": "invention",
+                "name": "发明专利",
+                "description": "对产品、方法或者其改进所提出的新的技术方案",
+                "protection_years": 20,
+                "typical_timeline": "18-36个月（普通），6-18个月（优先审查）",
+                "fee_schedule": {"application_fee": 900, "substantive_examination_fee": 2500, "annual_fee_year_1_3": 900, "annual_fee_year_4_6": 1200, "annual_fee_year_7_9": 2000},
+            },
+            {
+                "type": "utility",
+                "name": "实用新型专利",
+                "description": "对产品的形状、构造或者其结合所提出的适于实用的新的技术方案",
+                "protection_years": 10,
+                "typical_timeline": "6-12个月",
+                "fee_schedule": {"application_fee": 500, "annual_fee_year_1_3": 600, "annual_fee_year_4_5": 900, "annual_fee_year_6_8": 1200},
+            },
+            {
+                "type": "design",
+                "name": "外观设计专利",
+                "description": "对产品的形状、图案或者其结合以及色彩与形状、图案的结合所作出的富有美感并适于工业应用的新设计",
+                "protection_years": 15,
+                "typical_timeline": "4-8个月",
+                "fee_schedule": {"application_fee": 500, "annual_fee_year_1_3": 600, "annual_fee_year_4_5": 900, "annual_fee_year_6_8": 1200},
+            },
+            {
+                "type": "software_copyright",
+                "name": "计算机软件著作权",
+                "description": "对计算机软件作品的著作权保护，含源程序及相关文档",
+                "protection_years": 50,
+                "typical_timeline": "30-60个工作日（普通），15个工作日（加急）",
+                "fee_schedule": {"application_fee": 300, "expedited_fee": 500},
+            },
+        ],
+    },
+}
+
+
+class Inventor(BaseModel):
+    name: str = Field(..., min_length=1, description="发明人/设计人姓名")
+    id_number: str = Field(..., min_length=1, description="身份证号")
+
+
+class IPApplicationParams(BaseModel):
+    # 知识产权类型
+    ip_type: str = Field(..., description="知识产权类型: invention（发明专利）/ utility（实用新型）/ design（外观设计）/ software_copyright（软件著作权）")
+
+    # 申请名称
+    title: Dict[str, str] = Field(..., description="申请名称，如 {'zh': '一种XXX方法及系统', 'en': 'A method and system for XXX'}")
+
+    # 申请人/权人信息
+    applicant_type: str = Field(..., description="申请人类型: company（企业）/ individual（个人）/ joint（共同申请）")
+    applicant_name: str = Field(..., min_length=1, description="申请人名称（企业全称或个人姓名）")
+    applicant_credit_code: Optional[str] = Field(None, description="统一社会信用代码（企业申请时必填）")
+    applicant_id_number: Optional[str] = Field(None, description="身份证号（个人申请时必填）")
+
+    # 发明人/设计人
+    inventors: List[Inventor] = Field(..., min_length=1, description="发明人/设计人列表（至少1人）")
+
+    # 联系人
+    contact_name: str = Field(..., min_length=1, description="联系人姓名")
+    contact_phone: str = Field(..., min_length=11, description="联系人手机号")
+    contact_email: Optional[str] = Field(None, description="联系邮箱")
+
+    # 技术内容
+    technical_field: str = Field(..., min_length=1, description="所属技术领域")
+    abstract: str = Field(..., max_length=1000, description="摘要（中文，1000字以内）")
+    claims_text: Optional[str] = Field(None, description="权利要求书全文（发明专利/实用新型必填）")
+    description: Optional[str] = Field(None, description="说明书全文（含技术领域、背景技术、发明内容、附图说明、具体实施方式）")
+
+    # 附图
+    has_drawings: bool = Field(False, description="是否包含附图")
+    drawing_description: Optional[str] = Field(None, description="附图说明（当 has_drawings=True 时推荐填写）")
+
+    # 优先权
+    priority_info: Optional[Dict[str, Any]] = Field(None, description="优先权信息，如 {\"app_number\": \"CN202310001234.5\", \"date\": \"2023-01-01\", \"country\": \"中国\"}")
+
+    # 软著专用字段
+    source_code_extracts: Optional[str] = Field(None, description="源程序摘录（软件著作权申请时提供，前30页+后30页）")
+    user_manual_pages: Optional[int] = Field(None, ge=1, description="用户手册页数（软件著作权申请时提供）")
+
+    # 加急
+    is_expedited: bool = Field(False, description="是否加急处理")
+
+    # 备注
+    notes: Optional[str] = Field(None, description="补充说明")
+
+    # ── 校验器 ──
+
+    @field_validator("ip_type")
+    @classmethod
+    def validate_ip_type(cls, v):
+        valid_types = {"invention", "utility", "design", "software_copyright"}
+        if v not in valid_types:
+            raise ValueError(f"无效的知识产权类型: {v}，支持: {', '.join(valid_types)}")
+        return v
+
+    @field_validator("applicant_type")
+    @classmethod
+    def validate_applicant_type(cls, v):
+        valid_types = {"company", "individual", "joint"}
+        if v not in valid_types:
+            raise ValueError(f"无效的申请人类型: {v}，支持: {', '.join(valid_types)}")
+        return v
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v):
+        if "zh" not in v:
+            raise ValueError("标题必须包含中文字段 (zh)")
+        if len(v["zh"]) < 4:
+            raise ValueError(f"中文标题太短: {v['zh']}，至少4个字符")
+        return v
+
+    @field_validator("inventors")
+    @classmethod
+    def validate_inventors(cls, v):
+        if len(v) < 1:
+            raise ValueError("至少需要1名发明人/设计人")
+        return v
+
+    @field_validator("abstract")
+    @classmethod
+    def validate_abstract_length(cls, v):
+        if len(v) > 1000:
+            raise ValueError(f"摘要字数超出限制，当前 {len(v)} 字，最大1000字")
+        return v
+
+    @model_validator(mode="after")
+    def validate_claims_for_invention_utility(self):
+        if self.ip_type in ("invention", "utility") and not self.claims_text:
+            raise ValueError("发明专利和实用新型必须提供权利要求书 (claims_text)")
+        return self
+
+
+# ═══════════════════════════════════════════════
+# 板块五：进出口备案 (import_export)
+# ═══════════════════════════════════════════════
+
+IMPORT_EXPORT_STATUSES = [
+    "draft",                        # 初始状态，信息不完整
+    "materials_collecting",         # 材料收集阶段
+    "customs_registration",         # 海关登记/备案中
+    "e_port_registration",          # 电子口岸IC卡办理中
+    "foreign_exchange_registration", # 外汇管理局备案中
+    "tax_rebate_registration",      # 出口退税备案中
+    "needs_info",                   # 需要补充材料（可从任何状态进入）
+    "completed",                    # 已完成
+    "failed",                       # 任务失败
+]
+
+CAPABILITIES_IE = {
+    "status_machine": {
+        "initial": "draft",
+        "states": IMPORT_EXPORT_STATUSES,
+        "transitions": {
+            "draft": ["materials_collecting"],
+            "materials_collecting": ["customs_registration", "needs_info"],
+            "customs_registration": ["e_port_registration", "needs_info"],
+            "e_port_registration": ["foreign_exchange_registration", "needs_info"],
+            "foreign_exchange_registration": ["tax_rebate_registration", "needs_info"],
+            "tax_rebate_registration": ["completed", "needs_info"],
+            "needs_info": ["materials_collecting", "customs_registration", "e_port_registration", "foreign_exchange_registration", "tax_rebate_registration"],
+            "completed": [],
+            "failed": [],
+        },
+    },
+    "agent_auto": {
+        "description": "以下判定对方 agent 可独立完成，无需人工介入",
+        "items": [
+            {"id": "document_format_check", "name": "文件格式校验", "detail": "校验文件类型、大小、清晰度，确保符合海关/商务局系统上传要求"},
+            {"id": "info_consistency_check", "name": "信息一致性校验", "detail": "核对公司名称、信用代码、经营范围等是否在全部文件中保持一致"},
+            {"id": "cross_step_dependency_tracking", "name": "跨步骤依赖追踪", "detail": "前一步骤的审批结果自动触发下一步骤所需材料的准备提醒"},
+            {"id": "fee_calculation", "name": "费用自动计算", "detail": "根据备案类型、是否加急、是否委托代办等自动计算各项官费和代理费"},
+        ],
+    },
+    "human_required": {
+        "description": "以下事项需要真人介入",
+        "items": [
+            {"id": "customs_submission", "name": "海关系统提交", "detail": "需登录中国国际贸易单一窗口进行最终提交，CA证书/电子口岸卡签名"},
+            {"id": "e_port_card_pickup", "name": "电子口岸卡领取", "detail": "电子口岸IC卡/读卡器需线下领取或快递签收，需专人跟进"},
+            {"id": "bank_foreign_exchange_handling", "name": "银行外汇备案办理", "detail": "企业名录登记需到银行柜台办理货物贸易外汇收支企业名录登记"},
+            {"id": "customs_officer_communication", "name": "海关官员沟通", "detail": "涉及海关现场查验、商品归类争议、价格质疑等需直接与海关人员沟通"},
+        ],
+    },
+    "escalation": {
+        "description": "触发转人的条件",
+        "trigger_conditions": [
+            {"condition": "特殊商品类别需商检", "action": "标记进出口商品涉及法检/商检品类 + 生成商检要求清单 + 转人工对接检验检疫部门"},
+            {"condition": "合规问题（商品归类/许可证）", "action": "标记合规风险 + 输出风险分析报告 + 转人工审核 + 暂停自动流程"},
+            {"condition": "关键材料缺失且自行无法补办", "action": "标记缺失材料清单 + 说明补办渠道和预计时间 + 转人工协调加急处理"},
+            {"condition": "办理超时", "action": "标记超时状态 + 输出当前卡点分析 + 通知人工催办 + 生成替代方案"},
+        ],
+    },
+    "knowledge_base": {
+        "description": "进出口备案流程知识库",
+        "step_workflow": [
+            {
+                "step": 1,
+                "name": "海关进出口货物收发货人备案",
+                "description": "在中国国际贸易单一窗口办理海关备案，获得海关10位编码",
+                "typical_timeline": "1-3个工作日（在线办理）",
+                "validity": "长期有效",
+                "competent_authority": "注册地海关（企管处/科）",
+            },
+            {
+                "step": 2,
+                "name": "电子口岸IC卡办理",
+                "description": "申领电子口岸卡（法人卡+操作员卡），用于后续所有电子报关操作",
+                "typical_timeline": "3-5个工作日（在线申请+线下领取/快递）",
+                "validity": "长期有效（需定期更新证书）",
+                "competent_authority": "当地电子口岸数据中心（数据分中心）",
+            },
+            {
+                "step": 3,
+                "name": "外汇管理局名录登记",
+                "description": "在银行或外管局办理货物贸易外汇收支企业名录登记，获得进出口收付汇资格",
+                "typical_timeline": "1-3个工作日（银行端办理）",
+                "validity": "长期有效",
+                "competent_authority": "注册地银行或国家外汇管理局分局",
+            },
+            {
+                "step": 4,
+                "name": "出口退（免）税备案",
+                "description": "在电子税务局办理出口退免税备案，获得出口退税申报资格",
+                "typical_timeline": "3-7个工作日（需审核）",
+                "validity": "长期有效",
+                "competent_authority": "主管税务机关",
+                "note": "仅限有出口业务且需要退税的企业",
+            },
+        ],
+        "required_documents": {
+            "customs_registration": [
+                "营业执照副本（加盖公章扫描件）",
+                "统一社会信用代码证书（如适用）",
+                "对外贸易经营者备案登记表（已取消，仅做提示）",
+                "企业公章电子印章",
+                "法人身份证正反面扫描件",
+                "操作员身份证正反面扫描件",
+                "海关报关单位情况登记表",
+            ],
+            "e_port_registration": [
+                "电子口岸企业入网申请表",
+                "营业执照副本复印件（加盖公章）",
+                "法人身份证复印件",
+                "操作员身份证复印件",
+                "海关备案证明文件",
+                "企业公章、法人章实体印章（线下领取时使用）",
+            ],
+            "foreign_exchange_registration": [
+                "货物贸易外汇收支企业名录登记申请表",
+                "营业执照副本原件及复印件",
+                "对外贸易经营者备案登记表（如持有）",
+                "海关进出口货物收发货人备案回执",
+                "企业公章",
+                "法人身份证原件（如到柜台办理）",
+            ],
+            "tax_rebate_registration": [
+                "出口退（免）税备案申请表",
+                "营业执照副本复印件",
+                "海关进出口货物收发货人备案回执复印件",
+                "开户银行许可证或基本存款账户信息表",
+                "企业公章",
+                "增值税一般纳税人资格登记表（如适用）",
+            ],
+        },
+        "typical_timelines": {
+            "total_estimated": "2-4周（全流程，不含特殊商品商检）",
+            "customs_registration": "1-3个工作日",
+            "e_port_registration": "3-5个工作日",
+            "foreign_exchange_registration": "1-3个工作日",
+            "tax_rebate_registration": "3-7个工作日",
+            "note_simultaneous": "海关备案和电子口岸卡办理可以同期进行",
+            "note_pickup": "电子口岸卡领取方式分为『线下自取』（当天）和『快递邮寄』（1-3天）",
+            "note_bank": "外汇名录登记可在任一具备外汇业务资质的银行办理，建议选择主要结算银行",
+        },
+        "common_pitfalls": [
+            {"issue": "经营范围未包含进出口相关表述", "consequence": "无法办理海关备案", "solution": "先办理经营范围变更，添加『货物进出口；技术进出口』等表述"},
+            {"issue": "营业执照注册地址与实际经营地址不一致", "consequence": "海关现场核查无法通过", "solution": "确保营业执照地址真实有效，或办理地址变更"},
+            {"issue": "报关负责人未持有报关员资格", "consequence": "部分海关要求报关人员持有报关员证", "solution": "安排公司人员参加报关员考试或委托专业报关行"},
+            {"issue": "电子口岸卡办理时法人信息不匹配", "consequence": "电子口岸卡申请被退回", "solution": "核对法人身份证号、姓名与工商登记信息完全一致"},
+        ],
+    },
+}
+
+
+class ImportExportParams(BaseModel):
+    """进出口备案参数模型"""
+
+    # 企业基本信息
+    company_name: str = Field(..., min_length=1, description="公司全称（需与营业执照一致）")
+    unified_social_credit_code: str = Field(..., min_length=18, max_length=18, description="统一社会信用代码（18位）")
+
+    # 经营范围
+    business_scope: str = Field(..., min_length=4, description="经营范围（必须包含进出口相关项目，如『货物进出口』『技术进出口』『进出口代理』等）")
+    registered_address: str = Field(..., min_length=4, description="注册地址（需与营业执照完全一致）")
+
+    # 法人信息
+    legal_person_name: str = Field(..., min_length=1, description="法定代表人姓名")
+    legal_person_phone: str = Field(..., min_length=11, description="法定代表人手机号")
+
+    # 联系人信息
+    contact_name: str = Field(..., min_length=1, description="联系人姓名（日常对接人）")
+    contact_phone: str = Field(..., min_length=11, description="联系人手机号")
+    contact_email: Optional[str] = Field(None, description="联系邮箱（接收海关通知等）")
+
+    # 报关负责人
+    customs_declaration_person_name: str = Field(..., min_length=1, description="报关负责人姓名")
+
+    # 业务类型
+    has_import_business: bool = Field(..., description="是否有进口业务")
+    has_export_business: bool = Field(..., description="是否有出口业务")
+    main_import_export_products: str = Field(..., min_length=2, description="主要进出口产品（如：电子元器件、机械设备、纺织品等）")
+
+    # 特殊商品
+    special_goods_types: Optional[List[str]] = Field(None, description="特殊商品类型，如 hazardous（危险品）/ food（食品/农产品）/ medical（医疗器械/药品）/ chemical（化工品）/ animal_plant（动植物及其产品）/ wood（木制品）/ cosmetic（化妆品）/ other（其他需商检品类）")
+
+    # 业务规模预估
+    expected_annual_import_volume_usd: Optional[float] = Field(None, ge=0, description="预计年进口额（美元）")
+    expected_annual_export_volume_usd: Optional[float] = Field(None, ge=0, description="预计年出口额（美元）")
+
+    # 所需服务选择
+    need_e_port_card: bool = Field(True, description="是否需要办理电子口岸IC卡（默认需要）")
+    need_safe_registration: bool = Field(True, description="是否需要外汇管理局名录登记（默认需要）")
+    need_export_tax_rebate: bool = Field(False, description="是否需要出口退免税备案（仅出口企业且需退税时勾选）")
+
+    # 已有材料
+    existing_documents: Optional[Dict[str, bool]] = Field(
+        None,
+        description="已有材料情况，如 {'customs_has': False, 'e_port_has': True, 'safe_has': False, 'tax_rebate_has': False}",
+    )
+
+    # 备注
+    notes: Optional[str] = Field(None, description="补充说明（如特殊需求、时间要求等）")
+
+    # ── 校验器 ──
+
+    @field_validator("unified_social_credit_code")
+    @classmethod
+    def validate_credit_code(cls, v):
+        if len(v) != 18:
+            raise ValueError(f"统一社会信用代码必须为18位，当前{v}长度{len(v)}")
+        return v
+
+    @field_validator("business_scope")
+    @classmethod
+    def validate_business_scope_contains_ie(cls, v):
+        import_export_keywords = ["进出口", "货物进出口", "技术进出口", "进出口代理", "国际贸易", "外贸"]
+        if not any(kw in v for kw in import_export_keywords):
+            raise ValueError(
+                f"经营范围必须包含进出口相关表述（如：货物进出口、技术进出口、进出口代理等），当前经营范围: {v}"
+            )
+        return v
+
+    @field_validator("has_import_business", "has_export_business")
+    @classmethod
+    def validate_at_least_one_business(cls, v, info):
+        # 此校验在 model_validator 中统一处理，此处仅通过类型检查
+        return v
+
+    @field_validator("special_goods_types")
+    @classmethod
+    def validate_special_goods_types(cls, v):
+        if v is not None:
+            valid_types = {"hazardous", "food", "medical", "chemical", "animal_plant", "wood", "cosmetic", "other"}
+            for t in v:
+                if t not in valid_types:
+                    raise ValueError(f"无效的特殊商品类型: {t}，支持: {', '.join(valid_types)}")
+        return v
+
+    @model_validator(mode="after")
+    def validate_business_type(self):
+        if not self.has_import_business and not self.has_export_business:
+            raise ValueError("至少需要选择进口业务或出口业务之一")
+        return self
+
+    @model_validator(mode="after")
+    def validate_special_goods_requires_customs_submission(self):
+        if self.special_goods_types:
+            # 含特殊商品时自动标记需要海关商检
+            pass
+        return self
+
+
+# ═══════════════════════════════════════════════
 # 服务注册表 — 所有支持的板块在此登记
 # ═══════════════════════════════════════════════
 
@@ -398,6 +1068,122 @@ def _inject_validation_rules(schema: Dict[str, Any]) -> Dict[str, Any]:
     return schema
 
 
+# ═══════════════════════════════════════════════
+# 板块六：法律咨询 (legal_consulting)
+# ═══════════════════════════════════════════════
+
+LEGAL_CONSULTING_STATUSES = [
+    "draft",
+    "consulting",
+    "needs_info",
+    "completed",
+    "failed",
+]
+
+CAPABILITIES_LEGAL = {
+    "status_machine": {
+        "initial": "draft",
+        "states": LEGAL_CONSULTING_STATUSES,
+        "transitions": {
+            "draft": ["consulting", "needs_info"],
+            "consulting": ["needs_info", "completed"],
+            "needs_info": ["consulting"],
+            "completed": [],
+            "failed": [],
+        },
+    },
+    "agent_auto": {
+        "description": "以下判定对方 agent 可独立完成",
+        "items": [
+            {"id": "document_format_check", "name": "文书格式检查", "detail": "检查上传文件的格式、完整性、可读性"},
+            {"id": "basic_legal_research", "name": "基础法律检索", "detail": "查找相关法律法规条文和司法解释作为参考"},
+            {"id": "deadline_tracking", "name": "期限跟踪提醒", "detail": "诉讼时效、合同到期日、立案期限等关键日期提醒"},
+            {"id": "conflict_check", "name": "利益冲突检索", "detail": "检查是否与已有案件存在利益冲突"},
+            {"id": "fee_estimation", "name": "费用预估", "detail": "根据案件类型和复杂度估算服务费用"},
+        ],
+    },
+    "human_required": {
+        "description": "以下事项需要律师/法务介入",
+        "items": [
+            {"id": "legal_analysis", "name": "法律分析意见", "detail": "出具法律分析报告，包含风险提示和建议方案"},
+            {"id": "document_drafting", "name": "法律文书起草", "detail": "合同、律师函、起诉状、答辩状等法律文书起草"},
+            {"id": "contract_review", "name": "合同审查/修订", "detail": "对合同条款进行逐条审查，标注风险并提出修改建议"},
+            {"id": "case_strategy", "name": "诉讼策略制定", "detail": "分析案情制定诉讼/仲裁策略"},
+            {"id": "negotiation_support", "name": "谈判支持", "detail": "陪同或远程参与商业谈判"},
+            {"id": "compliance_audit", "name": "合规审查", "detail": "对企业经营行为进行合规性审查并出具整改建议"},
+        ],
+    },
+    "escalation": {
+        "trigger_conditions": [
+            {"condition": "涉及刑事犯罪指控", "action": "标记高风险 + 推荐刑事律师团队"},
+            {"condition": "跨境法律事务", "action": "标记涉外 + 转涉外法律专家"},
+            {"condition": "标的额超过500万", "action": "标记重大案件 + 需合伙人审核 + 推荐高级律师"},
+            {"condition": "紧急法律需求（48小时内）", "action": "标记加急 + 优先安排律师"},
+            {"condition": "涉及上市公司/公众公司", "action": "标记特殊主体 + 需证券法律师介入"},
+        ],
+    },
+    "knowledge_base": {
+        "service_types": [
+            {"id": "contract_review", "name": "合同审查/修订", "typical_timeline": "1-3个工作日", "price_range": "500-3000/份"},
+            {"id": "legal_advice", "name": "法律咨询", "typical_timeline": "即时-1个工作日", "price_range": "200-1000/次"},
+            {"id": "document_drafting", "name": "法律文书起草", "typical_timeline": "2-5个工作日", "price_range": "1000-5000/份"},
+            {"id": "litigation_support", "name": "诉讼支持", "typical_timeline": "视案件复杂度", "price_range": "按标的比例或计时收费"},
+            {"id": "compliance_review", "name": "合规审查", "typical_timeline": "3-10个工作日", "price_range": "3000-20000/次"},
+            {"id": "equity_design", "name": "股权架构设计", "typical_timeline": "5-15个工作日", "price_range": "5000-30000/次"},
+        ],
+    },
+}
+
+
+class LegalConsultingParams(BaseModel):
+    """法律咨询服务参数"""
+    service_type: str = Field(..., description="服务类型: contract_review / legal_advice / document_drafting / litigation_support / compliance_review / equity_design")
+    company_name: str = Field(..., min_length=1, description="企业名称")
+    unified_social_credit_code: Optional[str] = Field(None, min_length=18, max_length=18, description="统一社会信用代码（18位）")
+
+    # 联系人
+    contact_name: str = Field(..., min_length=1, description="联系人姓名")
+    contact_phone: str = Field(..., min_length=11, description="联系人手机号")
+    contact_email: Optional[str] = Field(None, description="联系邮箱")
+
+    # 案件描述
+    case_title: str = Field(..., min_length=4, description="案件标题/摘要（如：XX采购合同审查）")
+    case_summary: str = Field(..., min_length=10, description="案件详细描述（包含背景、争议焦点、诉求）")
+    related_parties: Optional[str] = Field(None, description="相关方信息（对方名称、联系人等）")
+    contract_amount: Optional[float] = Field(None, ge=0, description="合同/案件涉及金额（万元）")
+
+    # 附件
+    has_uploaded_documents: Optional[bool] = Field(False, description="是否已上传相关文件")
+    uploaded_doc_types: Optional[List[str]] = Field(None, description="已上传文件类型列表")
+
+    # 紧急程度
+    urgency: str = Field("normal", description="紧急程度: normal / urgent / emergency")
+    expected_completion_date: Optional[str] = Field(None, description="期望完成日期（YYYY-MM-DD）")
+
+    # 偏好
+    preferred_lawyer_field: Optional[str] = Field(None, description="偏好律师专业领域（如：合同法、劳动法、知识产权法等）")
+    budget_range: Optional[str] = Field(None, description="预算范围")
+    is_commercial: Optional[bool] = Field(True, description="是否商业用途（个人咨询 vs 企业咨询）")
+
+    notes: Optional[str] = Field(None, description="补充说明")
+
+    @field_validator("service_type")
+    @classmethod
+    def validate_service_type(cls, v):
+        valid_types = ["contract_review", "legal_advice", "document_drafting", "litigation_support", "compliance_review", "equity_design"]
+        if v not in valid_types:
+            raise ValueError(f"无效服务类型: {v}，支持: {', '.join(valid_types)}")
+        return v
+
+    @field_validator("urgency")
+    @classmethod
+    def validate_urgency(cls, v):
+        valid_levels = ["normal", "urgent", "emergency"]
+        if v not in valid_levels:
+            raise ValueError(f"无效紧急程度: {v}，支持: {', '.join(valid_levels)}")
+        return v
+
+
 SERVICE_REGISTRY = {
     "company_registration": {
         "name": "公司注册",
@@ -426,6 +1212,36 @@ SERVICE_REGISTRY = {
             {"step_id": "e_sign_submission", "name": "e签宝递交", "order": 9, "agent_auto": False, "external_service": "e签宝"},
             {"step_id": "governance_review", "name": "工商局审核", "order": 10, "agent_auto": False},
             {"step_id": "license_collection", "name": "执照领取", "order": 11, "agent_auto": False},
+        ],
+    },
+    "high_tech_application": {
+        "name": "高企认定/专精特新",
+        "description": "国家高新技术企业认定、专精特新中小企业/小巨人申报。IP审计 -> 财务数据核验 -> 研发比例计算 -> 打分预评估 -> 材料提交 -> 专家评审 -> 答辩辅导。",
+        "status": "live",
+        "schema_model": HighTechApplicationParams,
+        "estimated_days": "90-180（按申报批次）",
+        "price_range": "8000-30000（按资质类型）",
+        "required_documents": [
+            "企业营业执照副本",
+            "近三年财务审计报告（含研发费用专项审计）",
+            "近三年企业所得税年度纳税申报表",
+            "知识产权证书（专利/软著/集成电路布图）",
+            "科技人员清单及学历/职称证明",
+            "研发项目立项报告及验收文件",
+            "高新技术产品（服务）收入专项审计报告",
+            "近三年科技成果转化证明材料",
+            "研发组织管理水平证明材料",
+            "产学研合作协议（如有）",
+        ],
+        "capabilities": CAPABILITIES_HIGH_TECH,
+        "workflow_steps": [
+            {"step_id": "ip_audit", "name": "知识产权审计", "order": 1, "agent_auto": True},
+            {"step_id": "financial_analysis", "name": "财务数据核验", "order": 2, "agent_auto": True},
+            {"step_id": "score_evaluation", "name": "评分预评估", "order": 3, "agent_auto": True},
+            {"step_id": "document_preparation", "name": "材料准备", "order": 4, "agent_auto": False, "human_role": "材料编制辅导"},
+            {"step_id": "submission", "name": "系统提交", "order": 5, "agent_auto": False, "external_service": "科技部/工信部申报系统"},
+            {"step_id": "expert_review", "name": "专家评审/答辩", "order": 6, "agent_auto": False, "human_role": "答辩辅导"},
+            {"step_id": "result", "name": "结果公示", "order": 7, "agent_auto": True},
         ],
     },
     "accounting": {
@@ -472,6 +1288,81 @@ SERVICE_REGISTRY = {
         "estimated_days": "5-10",
         "price_range": "500-2000",
         "capabilities": None,
+    },
+    "ip_application": {
+        "name": "专利/软著申请",
+        "description": "发明专利、实用新型、外观设计、软著申请全流程。查新 -> 撰写 -> 提交 -> 审查答复 -> 授权领证。",
+        "status": "live",
+        "schema_model": IPApplicationParams,
+        "estimated_days": "视类型而定（发明18-36个月，实用新型6-12个月，外观4-8个月，软著30-60个工作日）",
+        "price_range": "按需定价（发明专利4500-8000，实用新型2500-4000，外观1500-2500，软著800-1500）",
+        "required_documents": [
+            "技术交底书（含技术领域、背景技术、发明内容、有益效果、具体实施方式）",
+            "已有的在先申请文件（如有优先权要求）",
+            "发明人身份证复印件",
+            "申请人营业执照或身份证复印件",
+            "图纸/流程图（如有）",
+            "源程序代码摘录（软著申请）",
+            "用户手册（软著申请）",
+        ],
+        "capabilities": CAPABILITIES_IP,
+        "workflow_steps": [
+            {"step_id": "technical_disclosure", "name": "技术交底", "order": 1, "agent_auto": True},
+            {"step_id": "prior_art_search", "name": "查新检索", "order": 2, "agent_auto": True},
+            {"step_id": "patent_drafting", "name": "专利撰写", "order": 3, "agent_auto": False, "human_role": "专利代理人"},
+            {"step_id": "document_review", "name": "文件确认", "order": 4, "agent_auto": True},
+            {"step_id": "submission", "name": "提交申请", "order": 5, "agent_auto": False, "external_service": "专利电子申请系统/版权中心"},
+            {"step_id": "examination", "name": "审查阶段", "order": 6, "agent_auto": False, "human_role": "专利代理人"},
+            {"step_id": "grant_or_reject", "name": "授权/驳回", "order": 7, "agent_auto": True},
+        ],
+    },
+    "import_export": {
+        "name": "进出口备案",
+        "description": "企业进出口经营权备案全流程。海关备案 -> 电子口岸 -> 外汇名录 -> 出口退税，一步到位。含商品归类咨询及特殊品类商检指引。",
+        "status": "live",
+        "schema_model": ImportExportParams,
+        "estimated_days": "14-30",
+        "price_range": "800-2500",
+        "required_documents": [
+            "营业执照副本（加盖公章扫描件）",
+            "法人身份证正反面扫描件",
+            "操作员身份证正反面扫描件（办理电子口岸卡使用）",
+            "企业公章电子印章",
+            "开户银行许可证或基本存款账户信息",
+            "主要进出口产品清单及HS编码（如有）",
+        ],
+        "capabilities": CAPABILITIES_IE,
+        "workflow_steps": [
+            {"step_id": "materials_preparation", "name": "材料收集与审核", "order": 1, "agent_auto": True},
+            {"step_id": "customs_registration", "name": "海关备案提交", "order": 2, "agent_auto": False, "external_service": "中国国际贸易单一窗口"},
+            {"step_id": "e_port_card", "name": "电子口岸IC卡办理", "order": 3, "agent_auto": False, "human_role": "线下领取/快递签收"},
+            {"step_id": "safe_registration", "name": "外汇管理局名录登记", "order": 4, "agent_auto": False, "human_role": "银行柜台办理"},
+            {"step_id": "tax_rebate_registration", "name": "出口退免税备案", "order": 5, "agent_auto": False, "external_service": "电子税务局"},
+            {"step_id": "confirmation", "name": "完成确认", "order": 6, "agent_auto": True},
+        ],
+    },
+    "legal_consulting": {
+        "name": "法律咨询",
+        "description": "合同审查、法律咨询、文书起草、诉讼支持、合规审查。律师团队对接，覆盖公司法、合同法、劳动法、知识产权法等常见领域。",
+        "status": "live",
+        "schema_model": LegalConsultingParams,
+        "estimated_days": "视服务类型（1-15个工作日）",
+        "price_range": "200-30000（按类型）",
+        "required_documents": [
+            "合同/文件原件或扫描件（合同审查类）",
+            "案情描述及相关证据材料（诉讼支持类）",
+            "企业营业执照副本（企业客户）",
+            "双方联系方式及背景信息",
+        ],
+        "capabilities": CAPABILITIES_LEGAL,
+        "workflow_steps": [
+            {"step_id": "case_intake", "name": "案情收集与分析", "order": 1, "agent_auto": True},
+            {"step_id": "lawyer_assignment", "name": "指派律师", "order": 2, "agent_auto": False, "human_role": "案件分配"},
+            {"step_id": "legal_research", "name": "法律研究与分析", "order": 3, "agent_auto": False, "human_role": "律师"},
+            {"step_id": "deliverable", "name": "交付成果", "order": 4, "agent_auto": False, "human_role": "律师"},
+            {"step_id": "review_and_revise", "name": "审核与修订", "order": 5, "agent_auto": True},
+            {"step_id": "closure", "name": "结案", "order": 6, "agent_auto": True},
+        ],
     },
 }
 
@@ -571,6 +1462,51 @@ class DocumentGenerateRequest(BaseModel):
 class DocumentGenerateResponse(BaseModel):
     task_id: str
     documents: List[DocumentInfo]
+
+
+# ── 供应商模型 ──
+
+VALID_SUPPLIER_STATUSES = ["pending", "approved", "rejected"]
+
+class SupplierCreate(BaseModel):
+    name: str = Field(..., min_length=1, description="姓名/企业名称")
+    phone: str = Field(..., min_length=11, description="手机号")
+    wechat: Optional[str] = Field(None, description="微信号")
+    city: str = Field(..., min_length=1, description="所在城市")
+    service_types: List[str] = Field(..., min_length=1, description="可服务品类")
+    id_number: Optional[str] = Field(None, description="身份证号（自然人）/ 信用代码（企业）")
+    qualification_desc: Optional[str] = Field(None, description="资质说明")
+
+class SupplierUpdate(BaseModel):
+    status: str = Field(..., description="审核状态: approved / rejected")
+    notes: Optional[str] = Field(None, description="审核备注")
+
+class SupplierInfo(BaseModel):
+    id: int
+    name: str
+    phone: str
+    wechat: Optional[str] = None
+    city: str
+    service_types: List[str]
+    id_number: Optional[str] = None
+    qualification_desc: Optional[str] = None
+    status: str
+    notes: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+class SupplierListResponse(BaseModel):
+    suppliers: List[SupplierInfo]
+    total: int
+
+
+# ── 面板统数据 ──
+
+class DashboardResponse(BaseModel):
+    task_counts: Dict[str, int]
+    total_tasks: int
+    supplier_counts: Dict[str, int]
+    total_suppliers: int
 
 
 # ── 文件 ──
