@@ -59,6 +59,30 @@ def init_db():
             FOREIGN KEY (task_id) REFERENCES tasks(id)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            doc_type TEXT NOT NULL,
+            doc_name TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            file_path TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (task_id) REFERENCES tasks(id)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS document_generation_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'queued',
+            error_message TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            FOREIGN KEY (task_id) REFERENCES tasks(id)
+        )
+    """)
     conn.commit()
     conn.close()
 

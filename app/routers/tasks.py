@@ -27,7 +27,7 @@ def create_task(
 ):
     task_id = str(uuid.uuid4()).replace("-", "")
     now = datetime.now(timezone.utc).isoformat()
-    status = "pending_review"
+    status = "draft"
 
     with get_db() as db:
         db.execute(

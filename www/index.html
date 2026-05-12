@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Human Gates — 打通 AI 与人类世界的最后一公里</title>
+  <meta name="description" content="Human Gates 是 AI Agent 与物理世界之间的桥梁。通过统一 API 提交需要真人执行的任务——工商注册、银行开户、诉讼代办、跑腿办事——我们安排在当地的真人服务商完成，结果自动回传。">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%231a56db'/><text x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='18' font-weight='700' font-family='sans-serif'>HG</text></svg>">
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="navbar">
+    <div class="container">
+      <a href="/" class="logo">
+        <span class="logo-icon">HG</span>
+        Human Gates
+      </a>
+      <button class="mobile-toggle" aria-label="菜单">☰</button>
+      <ul class="nav-links">
+        <li><a href="/" class="active">首页</a></li>
+        <li><a href="/api-docs">API 文档</a></li>
+        <li><a href="/pricing">价格</a></li>
+        <li><a href="/pricing#contact" class="nav-cta">联系我们</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="container">
+      <span class="status-badge status-badge-live">v0.3.0 · 开发中</span>
+      <h1>打通 AI 与人类世界的<br>最后一公里</h1>
+      <p class="hero-lead">AI Agent 能写代码、能处理数据、能调用 API——但无法走进工商局、银行柜台、法院窗口和政府大厅。<br>Human Gates 填补这道鸿沟。一条 API，所有需要真人执行的线下任务，自动有人完成。</p>
+      <div class="hero-actions">
+        <a href="/api-docs" class="btn btn-primary">查看 API 文档 →</a>
+        <a href="#blueprint" class="btn btn-secondary">浏览服务蓝图</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- The Gap -->
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">鸿沟在哪里</h2>
+      <p class="section-subtitle">AI 的能力边界止于物理世界。你需要的不只是代码，是能干活的人。</p>
+      <div class="gap-grid">
+        <div class="gap-card gap-ai">
+          <div class="gap-label">AI 能做</div>
+          <ul>
+            <li>✕ 写代码、调 API</li>
+            <li>✕ 处理文档、分析数据</li>
+            <li>✕ 自动回复、生成内容</li>
+            <li>✕ 7×24 在线不休息</li>
+          </ul>
+        </div>
+        <div class="gap-arrow">→</div>
+        <div class="gap-card gap-human">
+          <div class="gap-label">但去不了</div>
+          <ul>
+            <li>✕ 工商局递交材料</li>
+            <li>✕ 银行柜台开对公户</li>
+            <li>✕ 法院窗口立案</li>
+            <li>✕ 政府大厅排队办证</li>
+            <li>✕ 公证处签字取证</li>
+          </ul>
+        </div>
+      </div>
+      <div class="gap-bridge">
+        <span class="gap-bridge-label">Human Gates 连接两端</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Platform Model -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">平台模式</h2>
+      <p class="section-subtitle">不是代办公司，是 AI 时代的物理世界路由层。</p>
+      <div class="platform-flow">
+        <div class="flow-node">
+          <div class="flow-icon">🤖</div>
+          <div class="flow-label">AI Agent /<br>开发者</div>
+        </div>
+        <div class="flow-connector">→</div>
+        <div class="flow-node flow-node-api">
+          <div class="flow-icon">🔌</div>
+          <div class="flow-label">Human Gates<br><span>REST API</span></div>
+        </div>
+        <div class="flow-connector">→</div>
+        <div class="flow-node flow-node-ops">
+          <div class="flow-icon">📋</div>
+          <div class="flow-label">运营中心<br><span>审核 + 派单</span></div>
+        </div>
+        <div class="flow-connector">→</div>
+        <div class="flow-node flow-node-provider">
+          <div class="flow-icon">👤</div>
+          <div class="flow-label">服务商网络<br><span>注册制 · 覆盖全国</span></div>
+        </div>
+        <div class="flow-connector">→</div>
+        <div class="flow-node flow-node-done">
+          <div class="flow-icon">✅</div>
+          <div class="flow-label">物理世界<br><span>任务完成</span></div>
+        </div>
+      </div>
+      <div class="platform-note">
+        <p>开发者对接一条 API，Human Gates 负责匹配、调度和管理线下执行方。你不需要知道每个城市谁在跑腿——知道结果会回来就行。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Service Blueprint -->
+  <section class="section section-alt" id="blueprint">
+    <div class="container">
+      <h2 class="section-title">服务蓝图</h2>
+      <p class="section-subtitle">一人公司全生命周期所需的所有线下行政服务，一个 API 全部覆盖。GET /v1/services 自动发现所有品类及 JSON Schema。</p>
+      <div class="blueprint-grid">
+        <div class="blueprint-card blueprint-live">
+          <div class="blueprint-header">
+            <span class="blueprint-badge">已上线</span>
+            <h3>公司注册</h3>
+          </div>
+          <p>石家庄有限责任公司设立。18个结构化字段+12个子字段，AI 一次读全、一次填对。</p>
+          <div class="blueprint-tags">
+            <span>Schema就绪</span><span>章程生成</span><span>执照领取</span>
+          </div>
+        </div>
+        <div class="blueprint-card blueprint-coming">
+          <div class="blueprint-header">
+            <span class="blueprint-badge" style="background:#dbeafe;color:#2563eb;">Schema就绪</span>
+            <h3>代理记账</h3>
+          </div>
+          <p>小规模/一般纳税人月度记账报税。12个结构化字段已定义，Schema已入库。</p>
+          <div class="blueprint-tags">
+            <span>Schema就绪</span><span>月报</span><span>年报</span>
+          </div>
+        </div>
+        <div class="blueprint-card blueprint-planning">
+          <div class="blueprint-header">
+            <span class="blueprint-badge" style="background:#f3f4f6;color:#9ca3af;">规划中</span>
+            <h3>银行开户</h3>
+          </div>
+          <p>对公账户预约、法人面签陪同、开户资料预审，确保一次通过。</p>
+          <div class="blueprint-tags">
+            <span>预约面签</span><span>法人到场</span><span>资料指导</span>
+          </div>
+        </div>
+        <div class="blueprint-card blueprint-planning">
+          <div class="blueprint-header">
+            <span class="blueprint-badge" style="background:#f3f4f6;color:#9ca3af;">规划中</span>
+            <h3>税务登记</h3>
+          </div>
+          <p>新设公司税务登记办理，小规模/一般纳税人资格认定。</p>
+          <div class="blueprint-tags">
+            <span>税种核定</span><span>一般纳税人</span><span>发票申领</span>
+          </div>
+        </div>
+        <div class="blueprint-card blueprint-planning">
+          <div class="blueprint-header">
+            <span class="blueprint-badge" style="background:#f3f4f6;color:#9ca3af;">规划中</span>
+            <h3>资质代办</h3>
+          </div>
+          <p>ICP许可证、食品经营许可、医疗器械备案，材料预审+全程对接。</p>
+          <div class="blueprint-tags">
+            <span>ICP</span><span>食品许可</span><span>医疗器械</span>
+          </div>
+        </div>
+        <div class="blueprint-card blueprint-planning">
+          <div class="blueprint-header">
+            <span class="blueprint-badge" style="background:#f3f4f6;color:#9ca3af;">规划中</span>
+            <h3>工商变更</h3>
+          </div>
+          <p>法人变更、股东变更、经营范围变更、地址变更，全套流程。</p>
+          <div class="blueprint-tags">
+            <span>股权变更</span><span>增资减资</span><span>地址迁移</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- For Developers -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title">写给开发者</h2>
+      <p class="section-subtitle">你在构建一个 AI Agent，它需要去趟工商局。现在，一条 API 就够了。</p>
+      <div class="dev-message">
+        <div class="dev-code">
+          <pre><code>POST /v1/tasks
+{
+  "type": "company_registration",
+  "params": {
+    "company_names": ["北京赛博科技有限公司"],
+    "shareholders": [...],
+    "registered_capital": 100,
+    "business_scope": "技术开发、技术咨询"
+  }
+}
+
+→ 201 Created
+→ task_id: "abc-123"
+→ status: "pending_review"</code></pre>
+        </div>
+        <div class="dev-text">
+          <h3>一个 API 调用，启动物理世界的任务链</h3>
+          <ul>
+            <li><strong>结构化输入</strong> — 每个任务类型有明确的 JSON Schema，拒绝模糊的微信群消息</li>
+            <li><strong>全透明追踪</strong> — 从提交到完成，每步状态变化都记录在时间线里</li>
+            <li><strong>文件即证据</strong> — 身份证、营业执照、申请书，全部通过 API 上传关联</li>
+            <li><strong>Webhook 回调</strong> — 任务完成自动通知，不需要轮询</li>
+          </ul>
+          <a href="/api-docs" class="btn btn-primary">阅读完整 API 文档 →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Supplier -->
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title">致服务商</h2>
+      <p class="section-subtitle">你熟悉本地的工商、税务、银行流程，我们有源源不断的订单和标准的 API 派单系统。</p>
+      <div class="supplier-grid">
+        <div class="supplier-card">
+          <div class="supplier-icon">📱</div>
+          <h3>注册入驻</h3>
+          <p>填写资质信息，通过审核后即可接单。一个链接完成入驻，不需复杂签约。</p>
+        </div>
+        <div class="supplier-card">
+          <div class="supplier-icon">📋</div>
+          <h3>系统派单</h3>
+          <p>任务自动匹配至你的服务范围，收到通知后按标准流程执行，结果通过系统回传。</p>
+        </div>
+        <div class="supplier-card">
+          <div class="supplier-icon">💰</div>
+          <h3>按单结算</h3>
+          <p>完成一单结算一单，无押金无月结。做多少拿多少，你的时间你定价。</p>
+        </div>
+      </div>
+      <p class="supplier-cta">供应商客户端开发中，预计 2026 Q3 开放注册。</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="logo">
+            <span class="logo-icon">HG</span>
+            Human Gates
+          </div>
+          <p>打通 AI 与人类世界的最后一公里。一条 API，连接所有需要真人执行的线下服务。</p>
+        </div>
+        <div class="footer-col">
+          <h4>产品</h4>
+          <a href="/api-docs">API 文档</a>
+          <a href="/pricing">价格</a>
+          <a href="#blueprint">服务蓝图</a>
+          <a href="https://github.com/nassen-yin/humangates">GitHub</a>
+        </div>
+        <div class="footer-col">
+          <h4>支持</h4>
+          <a href="/pricing#contact">联系我们</a>
+          <a href="mailto:dev@humangates.com">dev@humangates.com</a>
+          <a href="https://github.com/nassen-yin/humangates/issues">问题反馈</a>
+        </div>
+        <div class="footer-col">
+          <h4>视野</h4>
+          <a href="#">关于我们</a>
+          <a href="#">投资与合作</a>
+          <a href="#">成为服务商</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        © 2026 Human Gates. humangates.com — AI to Physical World, Last Mile Delivery.
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>
